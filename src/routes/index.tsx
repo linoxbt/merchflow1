@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { ArrowRight, Receipt, Users, TrendingUp, Zap } from "lucide-react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useWallet } from "@/lib/wallet";
 import { Button } from "@/components/ui/button";
 
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
-  const { connected, connect } = useWallet();
+  const { connected } = useWallet();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -49,8 +50,9 @@ function Landing() {
         <div className="mx-auto max-w-7xl px-6 pt-20 pb-24 sm:pt-28 sm:pb-32">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs font-mono text-muted-foreground mb-6">
             <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-            Built on QIE Testnet
+            Powered by QIE — Testnet & Mainnet live
           </div>
+
 
           <h1 className="font-mono font-bold text-4xl sm:text-6xl leading-[1.05] tracking-tight max-w-3xl">
             Accept payments.
@@ -67,13 +69,31 @@ function Landing() {
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button
-              size="lg"
-              onClick={connect}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              Connect QIE Wallet <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+            <ConnectButton.Custom>
+              {({ openConnectModal, account, mounted }) => {
+                const ready = mounted;
+                if (ready && account) {
+                  return (
+                    <Button
+                      size="lg"
+                      onClick={() => navigate({ to: "/dashboard" })}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    >
+                      Open Dashboard <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  );
+                }
+                return (
+                  <Button
+                    size="lg"
+                    onClick={openConnectModal}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    Connect Wallet <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                );
+              }}
+            </ConnectButton.Custom>
             <a href="#features">
               <Button
                 size="lg"
@@ -84,6 +104,7 @@ function Landing() {
               </Button>
             </a>
           </div>
+
         </div>
 
         {/* STATS */}
@@ -161,8 +182,7 @@ function Landing() {
       {/* FOOTER */}
       <footer className="mx-auto max-w-7xl px-6 py-10 flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
-          <span className="font-mono font-bold text-primary">MerchFlow</span>
-          <span>· Built on QIE Testnet</span>
+          <Link to="/" className="font-mono font-bold text-primary">MerchFlow</Link>
         </div>
         <div className="flex items-center gap-4">
           <Link to="/explore" className="hover:text-foreground">Explore</Link>
