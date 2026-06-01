@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, darkTheme, lightTheme } from "@rainbow-me/rainbowkit";
@@ -34,22 +34,13 @@ export function Providers({
   children: ReactNode;
   queryClient: QueryClient;
 }) {
-  // Avoid SSR hydration mismatch from wallet/theme state.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
-          {mounted ? (
-            <RainbowKitThemed>
-              <WalletProvider>{children}</WalletProvider>
-            </RainbowKitThemed>
-          ) : (
-            // During SSR + first paint render a wallet-less shell so layout doesn't shift.
-            <div style={{ visibility: "hidden" }}>{children}</div>
-          )}
+          <RainbowKitThemed>
+            <WalletProvider>{children}</WalletProvider>
+          </RainbowKitThemed>
         </QueryClientProvider>
       </WagmiProvider>
     </ThemeProvider>
