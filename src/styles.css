@@ -54,38 +54,75 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ---------- Light (default) — kimi.com style soft white ---------- */
 :root {
-  /* MerchFlow dark fintech terminal — always-on dark. */
   --radius: 0.5rem;
-  --background: oklch(0.16 0.018 240);          /* #060a10 */
-  --foreground: oklch(0.93 0.012 240);          /* #e2e8f0 */
-  --surface: oklch(0.21 0.018 244);             /* #0d1117 */
+  --background: oklch(0.985 0.003 80);            /* #faf9f7 soft warm white */
+  --foreground: oklch(0.21 0.015 250);            /* near-black ink */
+  --surface: oklch(0.97 0.004 80);                /* card surface */
+  --surface-2: oklch(0.94 0.005 80);              /* hover / pill bg */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.015 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.015 250);
+  --primary: oklch(0.55 0.11 210);                /* QIE teal, darker for light */
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.94 0.005 80);
+  --secondary-foreground: oklch(0.21 0.015 250);
+  --muted: oklch(0.94 0.005 80);
+  --muted-foreground: oklch(0.5 0.015 250);
+  --accent: oklch(0.62 0.12 210);
+  --accent-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.58 0.21 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.58 0.16 150);
+  --warning: oklch(0.68 0.16 70);
+  --info: oklch(0.62 0.12 230);
+  --border: oklch(0.9 0.006 80);
+  --input: oklch(0.96 0.004 80);
+  --ring: oklch(0.55 0.11 210);
+  --chart-1: oklch(0.55 0.11 210);
+  --chart-2: oklch(0.58 0.16 150);
+  --chart-3: oklch(0.68 0.16 70);
+  --chart-4: oklch(0.58 0.21 25);
+  --chart-5: oklch(0.6 0.12 280);
+  --sidebar: oklch(0.97 0.004 80);
+  --sidebar-foreground: oklch(0.21 0.015 250);
+  --sidebar-primary: oklch(0.55 0.11 210);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.005 80);
+  --sidebar-accent-foreground: oklch(0.21 0.015 250);
+  --sidebar-border: oklch(0.9 0.006 80);
+  --sidebar-ring: oklch(0.55 0.11 210);
+}
+
+/* ---------- Dark — MerchFlow terminal ---------- */
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.16 0.018 240);
+  --foreground: oklch(0.93 0.012 240);
+  --surface: oklch(0.21 0.018 244);
   --surface-2: oklch(0.28 0.022 244);
   --card: oklch(0.21 0.018 244);
   --card-foreground: oklch(0.93 0.012 240);
   --popover: oklch(0.21 0.018 244);
   --popover-foreground: oklch(0.93 0.012 240);
-  --primary: oklch(0.66 0.11 210);              /* #1294a9 QIE teal */
+  --primary: oklch(0.66 0.11 210);
   --primary-foreground: oklch(0.98 0 0);
   --secondary: oklch(0.28 0.022 244);
   --secondary-foreground: oklch(0.93 0.012 240);
   --muted: oklch(0.28 0.022 244);
-  --muted-foreground: oklch(0.66 0.022 244);    /* #94a3b8 */
-  --accent: oklch(0.72 0.12 210);               /* #00b4cc */
+  --muted-foreground: oklch(0.66 0.022 244);
+  --accent: oklch(0.72 0.12 210);
   --accent-foreground: oklch(0.16 0.018 240);
-  --destructive: oklch(0.62 0.21 25);           /* #e53e3e */
+  --destructive: oklch(0.62 0.21 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --success: oklch(0.66 0.16 150);              /* #27ae60 */
-  --warning: oklch(0.76 0.16 70);               /* #f6a623 */
+  --success: oklch(0.66 0.16 150);
+  --warning: oklch(0.76 0.16 70);
   --info: oklch(0.7 0.12 230);
-  --border: oklch(0.32 0.022 244);              /* #1e2a38 */
+  --border: oklch(0.32 0.022 244);
   --input: oklch(0.21 0.018 244);
   --ring: oklch(0.66 0.11 210);
-  --chart-1: oklch(0.66 0.11 210);
-  --chart-2: oklch(0.66 0.16 150);
-  --chart-3: oklch(0.76 0.16 70);
-  --chart-4: oklch(0.62 0.21 25);
-  --chart-5: oklch(0.7 0.12 280);
   --sidebar: oklch(0.21 0.018 244);
   --sidebar-foreground: oklch(0.93 0.012 240);
   --sidebar-primary: oklch(0.66 0.11 210);
@@ -94,11 +131,6 @@
   --sidebar-accent-foreground: oklch(0.93 0.012 240);
   --sidebar-border: oklch(0.32 0.022 244);
   --sidebar-ring: oklch(0.66 0.11 210);
-}
-
-.dark {
-  /* App is always dark — keep .dark identical so dark variants still resolve. */
-  color-scheme: dark;
 }
 
 @layer base {
@@ -113,10 +145,6 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  html {
-    color-scheme: dark;
-  }
-
   .font-mono,
   code,
   pre,
@@ -128,6 +156,7 @@
 @layer utilities {
   .text-success { color: var(--color-success); }
   .text-warning { color: var(--color-warning); }
+  .text-info { color: var(--color-info); }
   .bg-success { background-color: var(--color-success); }
   .bg-warning { background-color: var(--color-warning); }
   .bg-surface { background-color: var(--color-surface); }
