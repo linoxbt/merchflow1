@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
@@ -11,7 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { WalletProvider } from "@/lib/wallet";
+import { Providers } from "@/components/providers";
 import { AppShell } from "@/components/app-shell";
 import { Toaster } from "sonner";
 
@@ -130,13 +130,11 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <WalletProvider>
-        <AppShell>
-          <Outlet />
-        </AppShell>
-        <Toaster theme="dark" position="bottom-right" />
-      </WalletProvider>
-    </QueryClientProvider>
+    <Providers queryClient={queryClient}>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+      <Toaster position="bottom-right" />
+    </Providers>
   );
 }

@@ -354,7 +354,7 @@ function InvoiceDetailSheet({
 
               <div className="rounded-md border border-border bg-background p-4 grid place-items-center">
                 <QRCodeSVG
-                  value={`merchflow:pay/${invoice.id}?amount=${invoice.amountQie}`}
+                  value={`${typeof window !== "undefined" ? window.location.origin : ""}/pay/${invoice.id}`}
                   size={150}
                   bgColor="transparent"
                   fgColor="#1294a9"
@@ -414,7 +414,7 @@ function TimelineItem({ label, done, date }: { label: string; done: boolean; dat
 
 function QrModal({ invoice, onClose }: { invoice: Invoice | null; onClose: () => void }) {
   if (!invoice) return null;
-  const payload = `merchflow:pay/${invoice.id}?amount=${invoice.amountQie}`;
+  const payload = `${typeof window !== "undefined" ? window.location.origin : ""}/pay/${invoice.id}`;
   const downloadPng = () => {
     const svg = document.getElementById("invoice-qr-svg") as SVGSVGElement | null;
     if (!svg) return;

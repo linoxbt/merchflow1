@@ -1,10 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
-import { Check, Copy, LayoutGrid, Menu, X } from "lucide-react";
-import { useWallet, truncateAddress } from "@/lib/wallet";
-import { Button } from "@/components/ui/button";
+import { LayoutGrid, Menu, X } from "lucide-react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useWallet } from "@/lib/wallet";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 const NAV_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
@@ -15,18 +15,9 @@ const NAV_LINKS = [
 ] as const;
 
 export function TopNav({ transparent = false }: { transparent?: boolean }) {
-  const { address, connected, connect, disconnect } = useWallet();
+  const { connected } = useWallet();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const [copied, setCopied] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const copy = async () => {
-    if (!address) return;
-    await navigator.clipboard.writeText(address);
-    setCopied(true);
-    toast.success("Address copied");
-    setTimeout(() => setCopied(false), 1200);
-  };
 
   return (
     <header
@@ -70,33 +61,12 @@ export function TopNav({ transparent = false }: { transparent?: boolean }) {
         )}
 
         <div className="flex items-center gap-2">
-          {connected ? (
-            <div className="hidden sm:flex items-center gap-2">
-              <div className="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-mono">
-                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                <span>{truncateAddress(address)}</span>
-                <button onClick={copy} className="text-muted-foreground hover:text-foreground">
-                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                </button>
-              </div>
-              <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/40 grid place-items-center text-primary text-xs font-mono uppercase">
-                {address?.slice(2, 3)}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={disconnect}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Disconnect
-              </Button>
-            </div>
-          ) : (
-            <Button onClick={connect} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              Connect QIE Wallet
-            </Button>
-          )}
-
+          <ThemeToggle />
+          <ConnectButton
+            accountStatus={{ smallScreen: "avatar", largeScreen: "address" }}
+            chainStatus={{ smallScreen: "icon", largeScreen: "full" }}
+            showBalance={false}
+          />
           {connected && (
             <button
               className="md:hidden p-2 rounded-md hover:bg-surface-2"
@@ -128,10 +98,6 @@ export function TopNav({ transparent = false }: { transparent?: boolean }) {
                 </Link>
               );
             })}
-            <div className="border-t border-border my-2" />
-            <div className="px-3 py-2 text-xs font-mono text-muted-foreground">
-              {truncateAddress(address)}
-            </div>
           </div>
         </div>
       )}
