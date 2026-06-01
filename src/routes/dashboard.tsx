@@ -43,7 +43,7 @@ function Dashboard() {
               <Users className="h-4 w-4 mr-2" /> Send Payroll
             </Button>
           </Link>
-          <Link to="/invoices" search={{ create: true } as never}>
+          <Link to="/invoices">
             <Button className="bg-primary hover:bg-primary/90">
               <Plus className="h-4 w-4 mr-2" /> Create Invoice
             </Button>
