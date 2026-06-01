@@ -83,11 +83,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "MerchFlow — The QIE merchant operating system" },
       { name: "description", content: "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing." },
       { name: "author", content: "MerchFlow" },
-      { property: "og:title", content: "MerchFlow — Built on QIE" },
-      { property: "og:description", content: "Invoices, payroll, and working-capital credit for QIE merchants." },
+      { property: "og:title", content: "MerchFlow — The QIE merchant operating system" },
+      { property: "og:description", content: "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "MerchFlow — The QIE merchant operating system" },
+      { name: "twitter:description", content: "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d2e13755-92df-420f-a4bc-e6db10c020c0" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d2e13755-92df-420f-a4bc-e6db10c020c0" },
     ],
     links: [
       {
