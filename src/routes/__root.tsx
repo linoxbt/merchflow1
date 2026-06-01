@@ -90,8 +90,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "MerchFlow — The QIE merchant operating system" },
       { name: "twitter:description", content: "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d2e13755-92df-420f-a4bc-e6db10c020c0" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d2e13755-92df-420f-a4bc-e6db10c020c0" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/e0141ce8-e187-4415-84e4-a70df179d5b3" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/e0141ce8-e187-4415-84e4-a70df179d5b3" },
     ],
     links: [
       {
