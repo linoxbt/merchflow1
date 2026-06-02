@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAccount, useDisconnect } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { getMerchantByWallet } from "@/lib/merchants.functions";
 
 export type MerchantProfile = {
   address: string;
@@ -61,6 +62,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const entry = store[address.toLowerCase()];
     setMerchantState(entry?.merchant ?? null);
     setPassVerifiedState(!!entry?.qiePassVerified);
+
+    // Hydrate from Supabase (source of truth)
+    let cancelled = false;
+    getMerchantByWallet({ data: { wallet: address } })
+      .then(({ merchant: row }) => {
+        if (cancelled || !row) return;
+        const hydrated: MerchantProfile = {
+          address,
+          businessName: row.business_name,
+          category: row.category ?? "",
+          description: row.description ?? "",
+          website: row.website ?? "",
+          registeredAt: row.onboarded_at
+            ? new Date(row.onboarded_at).getTime()
+            : Date.now(),
+        };
+        setMerchantState(hydrated);
+        setPassVerifiedState(!!row.qie_pass_verified);
+        const store2 = readStore();
+        store2[address.toLowerCase()] = {
+          merchant: hydrated,
+          qiePassVerified: !!row.qie_pass_verified,
+        };
+        writeStore(store2);
+      })
+      .catch((err) => console.error("Failed to load merchant", err));
+    return () => {
+      cancelled = true;
+    };
   }, [address]);
 
   const persist = useCallback(
