@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
+import { registerMerchant } from "@/lib/merchants.functions";
 
 export const Route = createFileRoute("/onboard")({
   head: () => ({ meta: [{ title: "Onboard — MerchFlow" }] }),
@@ -22,6 +24,7 @@ const CATEGORIES = [
 function Onboard() {
   const { address, connected, qiePassVerified, setPassVerified, merchant, setMerchant } = useWallet();
   const navigate = useNavigate();
+  const registerFn = useServerFn(registerMerchant);
   const [step, setStep] = useState(qiePassVerified ? 2 : 1);
   const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -57,17 +60,35 @@ function Onboard() {
   const register = async () => {
     if (!address) return;
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1400));
-    setMerchant({
-      address,
-      businessName: form.businessName.trim(),
-      category: form.category,
-      description: form.description.trim(),
-      website: form.website.trim(),
-      registeredAt: Date.now(),
-    });
-    toast.success("Business registered on QIE", { description: "Welcome to MerchFlow." });
-    navigate({ to: "/dashboard" });
+    try {
+      const { merchant: row } = await registerFn({
+        data: {
+          wallet: address,
+          businessName: form.businessName.trim(),
+          category: form.category,
+          description: form.description.trim(),
+          website: form.website.trim(),
+          qiePassVerified: true,
+        },
+      });
+      setMerchant({
+        address,
+        businessName: row.business_name,
+        category: row.category ?? form.category,
+        description: row.description ?? "",
+        website: row.website ?? "",
+        registeredAt: row.onboarded_at ? new Date(row.onboarded_at).getTime() : Date.now(),
+      });
+      toast.success("Business registered on QIE", { description: "Welcome to MerchFlow." });
+      navigate({ to: "/dashboard" });
+    } catch (err) {
+      console.error(err);
+      toast.error("Registration failed", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
