@@ -1,48 +1,96 @@
-// Mock data for the MerchFlow demo. Replace with on-chain reads once contracts ship.
+// Shared formatters and tiny constants used across the app.
+// All real data now flows through Supabase server functions; this file kept
+// only for formatting helpers (consumed in many places).
 
-export type InvoiceStatus = "paid" | "pending" | "overdue" | "cancelled";
+export type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
 
-export type Invoice = {
-  id: string;          // INV-0042
-  hash: string;        // 0x...
-  customer: string;
+/** Server-shaped invoice row (mirrors `public.invoices`). */
+export type InvoiceRow = {
+  id: string;
+  number: string;
+  merchant_wallet: string;
+  customer_wallet: string;
   description: string;
-  amountUsd: number;
-  amountQie: number;
-  dueDate: string;     // ISO
-  createdAt: string;   // ISO
+  amount_usd: number | string;
+  amount_qie: number | string;
+  due_date: string;
   status: InvoiceStatus;
-  txHash?: string;
+  tx_hash: string | null;
+  paid_at: string | null;
+  created_at: string;
 };
 
-export type PayrollRecipient = {
-  address?: string;
+export type PayrollRecipientRow = {
+  id: string;
+  run_id: string;
   label: string;
-  amountUsd: number;
-  amountQie: number;
-  claimCode?: string;
-  status: "received" | "pending_claim" | "claimed";
+  wallet: string | null;
+  amount_usd: number | string;
+  amount_qie: number | string;
+  claim_code: string | null;
+  status: "pending" | "received" | "pending_claim" | "claimed" | "failed";
+  created_at: string;
 };
 
-export type PayrollRun = {
+export type PayrollRunRow = {
   id: string;
-  date: string;
-  recipients: PayrollRecipient[];
-  totalQie: number;
-  status: "completed" | "processing";
+  number: string;
+  merchant_wallet: string;
+  total_usd: number | string;
+  total_qie: number | string;
+  recipient_count: number;
+  tx_hash: string | null;
+  status: "processing" | "completed" | "failed";
+  created_at: string;
+  payroll_recipients?: PayrollRecipientRow[];
 };
 
-export type ActivityEvent = {
+export type ActivityRow = {
   id: string;
-  type: "invoice_paid" | "payroll_sent" | "loan_issued" | "loan_repaid";
-  address: string;
-  amountQie: number;
-  timestamp: number;
+  type: "invoice_paid" | "payroll_sent" | "loan_issued" | "loan_repaid" | "merchant_registered";
+  actor_wallet: string;
+  amount_qie: number | string | null;
+  ref_id: string | null;
+  tx_hash: string | null;
+  created_at: string;
 };
 
-export const ORACLE_RATE = 1.024; // 1 USD = 1.024 QIE Stable
+export function num(v: number | string | null | undefined): number {
+  if (v == null) return 0;
+  const n = typeof v === "number" ? v : parseFloat(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
-export const MOCK_INVOICES: Invoice[] = [
+export function creditTier(score: number) {
+  if (score >= 720) return "Excellent";
+  if (score >= 620) return "Very Good";
+  if (score >= 500) return "Good";
+  if (score >= 350) return "Fair";
+  return "Poor";
+}
+
+export const MONTHLY_RATE = 0.024;
+export const CREDIT_MAX = 1000;
+
+export function formatQie(n: number) {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function formatUsd(n: number) {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function relativeTime(ts: number) {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+// Legacy export kept for any straggling import sites — will be removed once
+// every route reads real data. Currently re-exported below.
+const _LEGACY_REMOVED: never[] = [
   {
     id: "INV-0042",
     hash: "0x7f3ab9c1d8e2f456a1b3c7d9e0f1a2b3c4d5e6f7",
