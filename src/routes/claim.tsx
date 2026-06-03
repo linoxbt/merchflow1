@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Loader2, ExternalLink, Check } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
 import { useWallet } from "@/lib/wallet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { redeemClaimCode } from "@/lib/payroll.functions";
+import { formatQie, num, type PayrollRecipientRow } from "@/lib/mock-data";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/claim")({
@@ -12,19 +15,25 @@ export const Route = createFileRoute("/claim")({
 });
 
 function Claim() {
-  const { connected, connect } = useWallet();
+  const { connected, connect, address } = useWallet();
+  const redeem = useServerFn(redeemClaimCode);
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ amount: number; tx: string } | null>(null);
+  const [result, setResult] = useState<PayrollRecipientRow | null>(null);
 
-  const redeem = async () => {
+  const submit = async () => {
     if (!code.trim()) { toast.error("Enter your claim code"); return; }
-    if (!connected) { toast.error("Connect your wallet first"); return; }
+    if (!connected || !address) { toast.error("Connect your wallet first"); return; }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setLoading(false);
-    setResult({ amount: 153.6, tx: "0x" + Math.random().toString(16).slice(2).padEnd(40, "0").slice(0, 40) });
-    toast.success("Claim successful");
+    try {
+      const { recipient } = await redeem({ data: { code: code.trim(), wallet: address } });
+      setResult(recipient as PayrollRecipientRow);
+      toast.success("Claim successful");
+    } catch (err) {
+      toast.error("Could not redeem", { description: err instanceof Error ? err.message : "Try again" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -36,7 +45,7 @@ function Claim() {
               <Check className="h-5 w-5" />
             </div>
             <h1 className="font-mono font-bold text-xl">Redeemed!</h1>
-            <div className="mt-3 font-mono text-3xl text-primary">{result.amount.toFixed(2)} QIE</div>
+            <div className="mt-3 font-mono text-3xl text-primary">{formatQie(num(result.amount_qie))} QIE</div>
             <div className="text-sm text-muted-foreground mt-1">Sent to your wallet</div>
             <a href="#" className="mt-4 inline-flex items-center gap-1 text-xs font-mono text-primary hover:underline">
               View on QIE Explorer <ExternalLink className="h-3 w-3" />
@@ -59,7 +68,7 @@ function Claim() {
                 Connect QIE Wallet to Receive
               </Button>
             ) : (
-              <Button onClick={redeem} disabled={loading} className="mt-4 w-full bg-primary hover:bg-primary/90">
+              <Button onClick={submit} disabled={loading} className="mt-4 w-full bg-primary hover:bg-primary/90">
                 {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Redeeming…</> : "Redeem"}
               </Button>
             )}
