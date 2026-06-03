@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Plus, Search, QrCode, Copy, Download, MoreHorizontal, ExternalLink, X } from "lucide-react";
+import { Plus, Search, QrCode, Copy, Download, MoreHorizontal, ExternalLink, Camera } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { RequireWallet } from "@/components/guards";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +11,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { OracleRate } from "@/components/oracle-rate";
+import { QrScanner } from "@/components/qr-scanner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { MOCK_INVOICES, ORACLE_RATE, formatQie, type Invoice, type InvoiceStatus } from "@/lib/mock-data";
+import { formatQie, num, type InvoiceRow, type InvoiceStatus } from "@/lib/mock-data";
 import { useWallet, truncateAddress } from "@/lib/wallet";
+import { useQieOracle } from "@/lib/qie-hooks";
+import { createInvoice, listInvoicesByMerchant } from "@/lib/invoices.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/invoices")({
@@ -25,19 +30,33 @@ export const Route = createFileRoute("/invoices")({
 const TABS = ["all", "paid", "pending", "overdue", "cancelled"] as const;
 
 function Invoices() {
-  const [invoices, setInvoices] = useState<Invoice[]>(MOCK_INVOICES);
+  const { address } = useWallet();
+  const list = useServerFn(listInvoicesByMerchant);
+  const qc = useQueryClient();
+  const queryKey = ["invoices", address?.toLowerCase()];
+
+  const { data, isLoading } = useQuery({
+    queryKey,
+    enabled: !!address,
+    queryFn: () => list({ data: { wallet: address! } }),
+  });
+  const invoices = (data?.invoices ?? []) as InvoiceRow[];
+
   const [tab, setTab] = useState<(typeof TABS)[number]>("all");
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [active, setActive] = useState<Invoice | null>(null);
-  const [qrInvoice, setQrInvoice] = useState<Invoice | null>(null);
+  const [active, setActive] = useState<InvoiceRow | null>(null);
+  const [qrInvoice, setQrInvoice] = useState<InvoiceRow | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const filtered = useMemo(() => {
     return invoices.filter((i) => {
       if (tab !== "all" && i.status !== tab) return false;
       if (!q) return true;
       const s = q.toLowerCase();
-      return i.id.toLowerCase().includes(s) || i.customer.toLowerCase().includes(s) || i.description.toLowerCase().includes(s);
+      return i.number.toLowerCase().includes(s) ||
+        i.customer_wallet.toLowerCase().includes(s) ||
+        i.description.toLowerCase().includes(s);
     });
   }, [invoices, tab, q]);
 
@@ -48,11 +67,6 @@ function Invoices() {
     }
     return c;
   }, [invoices]);
-
-  const handleCreated = (inv: Invoice) => {
-    setInvoices((prev) => [inv, ...prev]);
-    setActive(inv);
-  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
@@ -66,9 +80,14 @@ function Invoices() {
           </h1>
           <OracleRate className="mt-2" />
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="bg-primary hover:bg-primary/90">
-          <Plus className="h-4 w-4 mr-2" /> Create Invoice
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" className="border border-border" onClick={() => setScannerOpen(true)}>
+            <Camera className="h-4 w-4 mr-2" /> Scan QR
+          </Button>
+          <Button onClick={() => setCreateOpen(true)} className="bg-primary hover:bg-primary/90">
+            <Plus className="h-4 w-4 mr-2" /> Create Invoice
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
@@ -97,8 +116,10 @@ function Invoices() {
       </div>
 
       <div className="rounded-lg border border-border bg-surface overflow-hidden">
-        {filtered.length === 0 ? (
-          <EmptyState onCreate={() => setCreateOpen(true)} />
+        {isLoading ? (
+          <div className="py-16 text-center text-sm text-muted-foreground">Loading invoices…</div>
+        ) : filtered.length === 0 ? (
+          <EmptyState onCreate={() => setCreateOpen(true)} hasAny={invoices.length > 0} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -121,16 +142,16 @@ function Invoices() {
                     onClick={() => setActive(inv)}
                     className="border-b border-border last:border-0 hover:bg-surface-2 cursor-pointer"
                   >
-                    <td className="py-3 px-4 font-mono">{inv.id}</td>
-                    <td className="py-3 px-4 font-mono text-muted-foreground">{truncateAddress(inv.customer)}</td>
+                    <td className="py-3 px-4 font-mono">{inv.number}</td>
+                    <td className="py-3 px-4 font-mono text-muted-foreground">{truncateAddress(inv.customer_wallet)}</td>
                     <td className="py-3 px-4 text-muted-foreground max-w-[260px] truncate">{inv.description}</td>
                     <td className="py-3 px-4 text-right">
-                      <div className="font-mono">{formatQie(inv.amountQie)} QIE</div>
-                      <div className="font-mono text-[10px] text-muted-foreground">${formatQie(inv.amountUsd)}</div>
+                      <div className="font-mono">{formatQie(num(inv.amount_qie))} QIE</div>
+                      <div className="font-mono text-[10px] text-muted-foreground">${formatQie(num(inv.amount_usd))}</div>
                     </td>
-                    <td className="py-3 px-4 text-muted-foreground">{inv.dueDate}</td>
-                    <td className="py-3 px-4 text-muted-foreground">{inv.createdAt}</td>
-                    <td className="py-3 px-4"><StatusBadge status={inv.status} /></td>
+                    <td className="py-3 px-4 text-muted-foreground">{inv.due_date}</td>
+                    <td className="py-3 px-4 text-muted-foreground">{inv.created_at.slice(0, 10)}</td>
+                    <td className="py-3 px-4"><StatusBadge status={inv.status as InvoiceStatus} /></td>
                     <td className="py-3 px-4">
                       <button
                         onClick={(e) => { e.stopPropagation(); setQrInvoice(inv); }}
@@ -150,7 +171,7 @@ function Invoices() {
       <CreateInvoiceDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={handleCreated}
+        onCreated={(inv) => { qc.invalidateQueries({ queryKey }); setActive(inv); }}
         onShowQr={(inv) => setQrInvoice(inv)}
       />
 
@@ -161,21 +182,35 @@ function Invoices() {
       />
 
       <QrModal invoice={qrInvoice} onClose={() => setQrInvoice(null)} />
+
+      <QrScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={(text) => {
+          const match = text.match(/\/pay\/([^/?#]+)/);
+          const id = match ? match[1] : text;
+          window.location.href = `/pay/${id}`;
+        }}
+      />
     </div>
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({ onCreate, hasAny }: { onCreate: () => void; hasAny: boolean }) {
   return (
     <div className="py-16 text-center">
       <div className="mx-auto h-12 w-12 rounded-full bg-surface-2 grid place-items-center mb-4">
         <QrCode className="h-5 w-5 text-muted-foreground" />
       </div>
-      <div className="font-medium">No invoices yet</div>
-      <div className="text-sm text-muted-foreground mt-1">Create your first invoice to start building your payment history.</div>
-      <Button onClick={onCreate} className="mt-4 bg-primary hover:bg-primary/90">
-        <Plus className="h-4 w-4 mr-2" /> Create Invoice
-      </Button>
+      <div className="font-medium">{hasAny ? "No invoices match this filter" : "No invoices yet"}</div>
+      <div className="text-sm text-muted-foreground mt-1">
+        {hasAny ? "Try clearing the filter or search." : "Create your first invoice to start building your payment history."}
+      </div>
+      {!hasAny && (
+        <Button onClick={onCreate} className="mt-4 bg-primary hover:bg-primary/90">
+          <Plus className="h-4 w-4 mr-2" /> Create Invoice
+        </Button>
+      )}
     </div>
   );
 }
@@ -185,49 +220,57 @@ function CreateInvoiceDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onCreated: (inv: Invoice) => void;
-  onShowQr: (inv: Invoice) => void;
+  onCreated: (inv: InvoiceRow) => void;
+  onShowQr: (inv: InvoiceRow) => void;
 }) {
+  const { address } = useWallet();
+  const { rate } = useQieOracle();
+  const create = useServerFn(createInvoice);
+
   const [customer, setCustomer] = useState("");
   const [description, setDescription] = useState("");
   const [amountUsd, setAmountUsd] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [label, setLabel] = useState("");
-  const [created, setCreated] = useState<Invoice | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [created, setCreated] = useState<InvoiceRow | null>(null);
 
   const amountQie = useMemo(() => {
     const n = parseFloat(amountUsd);
-    return Number.isFinite(n) ? n * ORACLE_RATE : 0;
-  }, [amountUsd]);
+    return Number.isFinite(n) ? n * rate : 0;
+  }, [amountUsd, rate]);
 
   const reset = () => {
     setCustomer(""); setDescription(""); setAmountUsd(""); setDueDate(""); setLabel(""); setCreated(null);
   };
 
-  const submit = () => {
-    if (!customer.startsWith("0x") || customer.length < 10) {
-      toast.error("Enter a valid wallet address");
-      return;
-    }
+  const submit = async () => {
+    if (!address) { toast.error("Wallet not connected"); return; }
+    if (!/^0x[a-fA-F0-9]{40}$/.test(customer)) { toast.error("Enter a valid wallet address"); return; }
     if (!description.trim()) { toast.error("Description required"); return; }
     if (!amountUsd || amountQie <= 0) { toast.error("Enter an amount"); return; }
     if (!dueDate) { toast.error("Pick a due date"); return; }
-
-    const num = Math.floor(1000 + Math.random() * 9000);
-    const inv: Invoice = {
-      id: `INV-${num.toString().padStart(4, "0")}`,
-      hash: "0x" + Math.random().toString(16).slice(2).padEnd(40, "0").slice(0, 40),
-      customer,
-      description: label ? `${label} — ${description}` : description,
-      amountUsd: parseFloat(amountUsd),
-      amountQie,
-      dueDate,
-      createdAt: new Date().toISOString().slice(0, 10),
-      status: "pending",
-    };
-    onCreated(inv);
-    setCreated(inv);
-    toast.success("Invoice created on QIE");
+    setSubmitting(true);
+    try {
+      const { invoice } = await create({
+        data: {
+          merchantWallet: address,
+          customerWallet: customer,
+          description: label ? `${label} — ${description}` : description,
+          amountUsd: parseFloat(amountUsd),
+          amountQie,
+          dueDate,
+        },
+      });
+      const row = invoice as InvoiceRow;
+      onCreated(row);
+      setCreated(row);
+      toast.success("Invoice created");
+    } catch (err) {
+      toast.error("Could not create invoice", { description: err instanceof Error ? err.message : "Try again" });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -237,7 +280,7 @@ function CreateInvoiceDialog({
           <>
             <DialogHeader>
               <DialogTitle>Create New Invoice</DialogTitle>
-              <DialogDescription>Generate an on-chain invoice and shareable QR code.</DialogDescription>
+              <DialogDescription>Generate an invoice and shareable QR code.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 mt-2">
               <div>
@@ -246,7 +289,7 @@ function CreateInvoiceDialog({
               </div>
               <div>
                 <Label>Invoice Description</Label>
-                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Web development services — July 2026" className="mt-1.5" />
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Web development services — July" className="mt-1.5" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -266,15 +309,11 @@ function CreateInvoiceDialog({
                 <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Project Alpha" className="mt-1.5" />
               </div>
 
-              <div className="rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
-                <div className="font-mono uppercase text-[10px] mb-1">Preview</div>
-                <div className="text-foreground font-medium">{description || "Invoice description"}</div>
-                <div className="font-mono mt-1">{formatQie(amountQie || 0)} QIE Stable</div>
-              </div>
-
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => onOpenChange(false)} className="border border-border">Cancel</Button>
-                <Button onClick={submit} className="bg-primary hover:bg-primary/90">Create Invoice</Button>
+                <Button onClick={submit} disabled={submitting} className="bg-primary hover:bg-primary/90">
+                  {submitting ? "Creating…" : "Create Invoice"}
+                </Button>
               </div>
             </div>
           </>
@@ -284,15 +323,15 @@ function CreateInvoiceDialog({
               ✓
             </div>
             <DialogTitle className="text-success">Invoice Created</DialogTitle>
-            <div className="font-mono text-lg mt-2">{created.id}</div>
-            <div className="font-mono text-muted-foreground text-sm">{formatQie(created.amountQie)} QIE</div>
+            <div className="font-mono text-lg mt-2">{created.number}</div>
+            <div className="font-mono text-muted-foreground text-sm">{formatQie(num(created.amount_qie))} QIE</div>
             <p className="mt-3 text-sm text-muted-foreground">Share this link or QR code with your customer.</p>
             <div className="mt-4 flex justify-center gap-2">
               <Button
                 variant="ghost"
                 className="border border-border"
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/pay/${created.id}`);
+                  navigator.clipboard.writeText(`${window.location.origin}/pay/${created.number}`);
                   toast.success("Payment link copied");
                 }}
               >
@@ -312,9 +351,9 @@ function CreateInvoiceDialog({
 function InvoiceDetailSheet({
   invoice, onClose, onShowQr,
 }: {
-  invoice: Invoice | null;
+  invoice: InvoiceRow | null;
   onClose: () => void;
-  onShowQr: (inv: Invoice) => void;
+  onShowQr: (inv: InvoiceRow) => void;
 }) {
   return (
     <Sheet open={!!invoice} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -323,14 +362,14 @@ function InvoiceDetailSheet({
           <>
             <SheetHeader>
               <div className="flex items-center justify-between">
-                <SheetTitle className="font-mono">{invoice.id}</SheetTitle>
-                <StatusBadge status={invoice.status} />
+                <SheetTitle className="font-mono">{invoice.number}</SheetTitle>
+                <StatusBadge status={invoice.status as InvoiceStatus} />
               </div>
             </SheetHeader>
             <div className="mt-6 space-y-5 text-sm">
               <div>
                 <div className="text-[10px] font-mono uppercase text-muted-foreground">Customer</div>
-                <div className="font-mono mt-1">{truncateAddress(invoice.customer, 10, 8)}</div>
+                <div className="font-mono mt-1">{truncateAddress(invoice.customer_wallet, 10, 8)}</div>
               </div>
               <div>
                 <div className="text-[10px] font-mono uppercase text-muted-foreground">Description</div>
@@ -338,26 +377,26 @@ function InvoiceDetailSheet({
               </div>
               <div>
                 <div className="text-[10px] font-mono uppercase text-muted-foreground">Amount</div>
-                <div className="font-mono text-2xl mt-1">{formatQie(invoice.amountQie)} <span className="text-sm text-muted-foreground">QIE Stable</span></div>
-                <div className="font-mono text-xs text-muted-foreground">≈ ${formatQie(invoice.amountUsd)} USD</div>
+                <div className="font-mono text-2xl mt-1">{formatQie(num(invoice.amount_qie))} <span className="text-sm text-muted-foreground">QIE Stable</span></div>
+                <div className="font-mono text-xs text-muted-foreground">≈ ${formatQie(num(invoice.amount_usd))} USD</div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-[10px] font-mono uppercase text-muted-foreground">Created</div>
-                  <div className="mt-1">{invoice.createdAt}</div>
+                  <div className="mt-1">{invoice.created_at.slice(0, 10)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] font-mono uppercase text-muted-foreground">Due</div>
-                  <div className="mt-1">{invoice.dueDate}</div>
+                  <div className="mt-1">{invoice.due_date}</div>
                 </div>
               </div>
 
               <div className="rounded-md border border-border bg-background p-4 grid place-items-center">
                 <QRCodeSVG
-                  value={`${typeof window !== "undefined" ? window.location.origin : ""}/pay/${invoice.id}`}
+                  value={typeof window !== "undefined" ? `${window.location.origin}/pay/${invoice.number}` : ""}
                   size={150}
                   bgColor="transparent"
-                  fgColor="#1294a9"
+                  fgColor="currentColor"
                 />
               </div>
 
@@ -366,7 +405,7 @@ function InvoiceDetailSheet({
                   variant="ghost"
                   className="flex-1 border border-border"
                   onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/pay/${invoice.id}`);
+                    navigator.clipboard.writeText(`${window.location.origin}/pay/${invoice.number}`);
                     toast.success("Payment link copied");
                   }}
                 >
@@ -377,23 +416,14 @@ function InvoiceDetailSheet({
                 </Button>
               </div>
 
-              {invoice.txHash && (
+              {invoice.tx_hash && (
                 <div>
                   <div className="text-[10px] font-mono uppercase text-muted-foreground">Transaction</div>
                   <a className="font-mono text-xs text-primary inline-flex items-center gap-1 mt-1 hover:underline" href="#">
-                    {truncateAddress(invoice.txHash, 10, 8)} <ExternalLink className="h-3 w-3" />
+                    {truncateAddress(invoice.tx_hash, 10, 8)} <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
               )}
-
-              <div>
-                <div className="text-[10px] font-mono uppercase text-muted-foreground mb-2">Timeline</div>
-                <ol className="space-y-2">
-                  <TimelineItem label="Created" done date={invoice.createdAt} />
-                  <TimelineItem label="Payment Received" done={invoice.status === "paid"} date={invoice.status === "paid" ? invoice.createdAt : "—"} />
-                  <TimelineItem label="Settled" done={invoice.status === "paid"} date={invoice.status === "paid" ? invoice.createdAt : "—"} />
-                </ol>
-              </div>
             </div>
           </>
         )}
@@ -402,49 +432,39 @@ function InvoiceDetailSheet({
   );
 }
 
-function TimelineItem({ label, done, date }: { label: string; done: boolean; date: string }) {
-  return (
-    <li className="flex items-center gap-3">
-      <div className={`h-2 w-2 rounded-full ${done ? "bg-success" : "bg-surface-2"}`} />
-      <div className="flex-1 text-sm">{label}</div>
-      <div className="text-xs font-mono text-muted-foreground">{date}</div>
-    </li>
-  );
-}
-
-function QrModal({ invoice, onClose }: { invoice: Invoice | null; onClose: () => void }) {
+function QrModal({ invoice, onClose }: { invoice: InvoiceRow | null; onClose: () => void }) {
   if (!invoice) return null;
-  const payload = `${typeof window !== "undefined" ? window.location.origin : ""}/pay/${invoice.id}`;
-  const downloadPng = () => {
+  const payload = `${typeof window !== "undefined" ? window.location.origin : ""}/pay/${invoice.number}`;
+  const downloadSvg = () => {
     const svg = document.getElementById("invoice-qr-svg") as SVGSVGElement | null;
     if (!svg) return;
     const xml = new XMLSerializer().serializeToString(svg);
     const url = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(xml)));
     const a = document.createElement("a");
-    a.href = url; a.download = `${invoice.id}.svg`; a.click();
+    a.href = url; a.download = `${invoice.number}.svg`; a.click();
     toast.success("QR downloaded");
   };
   return (
     <Dialog open={!!invoice} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-mono">{invoice.id}</DialogTitle>
+          <DialogTitle className="font-mono">{invoice.number}</DialogTitle>
           <DialogDescription>Pay with QIE Wallet — scan to pay.</DialogDescription>
         </DialogHeader>
         <div className="grid place-items-center py-4">
-          <div className="p-4 rounded-md border border-border bg-background">
-            <QRCodeSVG id="invoice-qr-svg" value={payload} size={256} bgColor="transparent" fgColor="#1294a9" />
+          <div className="p-4 rounded-md border border-border bg-background text-primary">
+            <QRCodeSVG id="invoice-qr-svg" value={payload} size={256} bgColor="transparent" fgColor="currentColor" />
           </div>
-          <div className="mt-4 font-mono text-2xl">{formatQie(invoice.amountQie)} QIE</div>
+          <div className="mt-4 font-mono text-2xl">{formatQie(num(invoice.amount_qie))} QIE</div>
         </div>
         <div className="flex gap-2 justify-center">
           <Button variant="ghost" className="border border-border" onClick={() => {
-            navigator.clipboard.writeText(`${window.location.origin}/pay/${invoice.id}`);
+            navigator.clipboard.writeText(payload);
             toast.success("Payment link copied");
           }}>
             <Copy className="h-4 w-4 mr-2" /> Copy Link
           </Button>
-          <Button onClick={downloadPng} className="bg-primary hover:bg-primary/90">
+          <Button onClick={downloadSvg} className="bg-primary hover:bg-primary/90">
             <Download className="h-4 w-4 mr-2" /> Download QR
           </Button>
         </div>

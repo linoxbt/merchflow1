@@ -25,7 +25,7 @@ export const qieTestnet = defineChain({
 export const qieMainnet = defineChain({
   id: 1990,
   name: "QIE Mainnet",
-  nativeCurrency: { name: "QIE", symbol: "QIE", decimals: 18 },
+  nativeCurrency: { name: "QIEV3", symbol: "QIEV3", decimals: 18 },
   rpcUrls: {
     default: {
       http: [
