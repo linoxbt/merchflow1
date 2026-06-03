@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { TrendingUp, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { RequireWallet } from "@/components/guards";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -10,10 +12,9 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  CREDIT_SCORE, CREDIT_SIGNALS, CREDIT_MAX, MAX_LOAN_QIE, MONTHLY_RATE,
-  ACTIVE_LOAN, POOL_STATS, creditTier, formatQie,
-} from "@/lib/mock-data";
+import { useWallet } from "@/lib/wallet";
+import { creditTier, formatQie, MONTHLY_RATE, num } from "@/lib/mock-data";
+import { getCreditProfile, getPoolStats, requestLoan, depositToPool } from "@/lib/credit.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/credit")({
@@ -22,9 +23,24 @@ export const Route = createFileRoute("/credit")({
 });
 
 function Credit() {
+  const { address } = useWallet();
+  const credit = useServerFn(getCreditProfile);
+  const poolFn = useServerFn(getPoolStats);
   const [borrowOpen, setBorrowOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
-  const eligible = CREDIT_SCORE >= 500;
+
+  const profile = useQuery({
+    queryKey: ["credit", address?.toLowerCase()],
+    enabled: !!address,
+    queryFn: () => credit({ data: { wallet: address! } }),
+  });
+  const pool = useQuery({ queryKey: ["pool-stats"], queryFn: () => poolFn() });
+
+  const score = profile.data?.score ?? 0;
+  const signals = profile.data?.signals ?? [];
+  const maxLoan = profile.data?.maxLoanQie ?? 0;
+  const active = profile.data?.activeLoan;
+  const eligible = score >= 500 && maxLoan > 0;
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
@@ -40,11 +56,10 @@ function Credit() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Score column */}
         <div className="rounded-lg border border-border bg-surface p-6">
-          <ScoreGauge value={CREDIT_SCORE} max={800} />
+          <ScoreGauge value={score} max={800} />
           <div className="mt-6 space-y-3">
-            {CREDIT_SIGNALS.map((s) => (
+            {signals.map((s) => (
               <div key={s.name}>
                 <div className="flex justify-between text-xs font-mono mb-1">
                   <span className="text-muted-foreground">{s.name}</span>
@@ -61,15 +76,14 @@ function Credit() {
           </div>
         </div>
 
-        {/* Credit products column */}
         <div className="space-y-6">
           {eligible ? (
             <div className="rounded-lg border border-success/30 bg-success/5 p-6">
               <div className="flex items-center gap-2 text-success font-mono text-sm">
                 <TrendingUp className="h-4 w-4" /> Eligible for Credit
               </div>
-              <div className="mt-3 font-mono text-3xl">{formatQie(MAX_LOAN_QIE)} <span className="text-sm text-muted-foreground">QIE Stable</span></div>
-              <div className="text-xs text-muted-foreground mt-1">Based on 3× your 30-day average revenue of 150 QIE Stable</div>
+              <div className="mt-3 font-mono text-3xl">{formatQie(maxLoan)} <span className="text-sm text-muted-foreground">QIE Stable</span></div>
+              <div className="text-xs text-muted-foreground mt-1">Based on 3× your 30-day average revenue</div>
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-md border border-border bg-background p-3">
                   <div className="text-[10px] font-mono uppercase text-muted-foreground">Rate</div>
@@ -87,66 +101,56 @@ function Credit() {
           ) : (
             <div className="rounded-lg border border-warning/30 bg-warning/5 p-6">
               <div className="text-warning font-mono text-sm">Not Yet Eligible</div>
-              <div className="text-xs text-muted-foreground mt-2">Minimum score required: 500</div>
+              <div className="text-xs text-muted-foreground mt-2">Minimum score required: 500 (and revenue history)</div>
               <div className="mt-3 h-2 bg-surface-2 rounded-full overflow-hidden">
-                <div className="h-full bg-warning" style={{ width: `${Math.min(100, (CREDIT_SCORE / 500) * 100)}%` }} />
+                <div className="h-full bg-warning" style={{ width: `${Math.min(100, (score / 500) * 100)}%` }} />
               </div>
             </div>
           )}
 
-          {/* Active loan */}
-          <div className="rounded-lg border border-border bg-surface p-6">
-            <div className="text-xs font-mono uppercase text-muted-foreground">Active Loan</div>
-            <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <div className="text-[10px] font-mono uppercase text-muted-foreground">Borrowed</div>
-                <div className="font-mono mt-1">{formatQie(ACTIVE_LOAN.borrowed)} QIE</div>
+          {active && (
+            <div className="rounded-lg border border-border bg-surface p-6">
+              <div className="text-xs font-mono uppercase text-muted-foreground">Active Loan</div>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Borrowed</div>
+                  <div className="font-mono mt-1">{formatQie(num(active.principal_qie))} QIE</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Interest</div>
+                  <div className="font-mono mt-1">{formatQie(num(active.interest_qie))} QIE</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Total Due</div>
+                  <div className="font-mono mt-1 text-warning">
+                    {formatQie(num(active.principal_qie) + num(active.interest_qie))} QIE
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-mono uppercase text-muted-foreground">Due Date</div>
+                  <div className="font-mono mt-1">{active.due_date}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-[10px] font-mono uppercase text-muted-foreground">Interest</div>
-                <div className="font-mono mt-1">{formatQie(ACTIVE_LOAN.interestAccrued)} QIE</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono uppercase text-muted-foreground">Total Due</div>
-                <div className="font-mono mt-1 text-warning">{formatQie(ACTIVE_LOAN.totalDue)} QIE</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono uppercase text-muted-foreground">Due Date</div>
-                <div className="font-mono mt-1">{ACTIVE_LOAN.dueDate}</div>
-              </div>
+              <Button className="mt-4 w-full bg-primary hover:bg-primary/90" onClick={() => toast.message("Repayment requires QIE Stable contract address (see VITE_QIE_STABLE_*)")}>
+                Make Repayment
+              </Button>
             </div>
-            <div className="mt-4">
-              <div className="flex justify-between text-xs font-mono mb-1">
-                <span className="text-muted-foreground">Repayment</span>
-                <span>{formatQie(ACTIVE_LOAN.paid)} / {formatQie(ACTIVE_LOAN.totalDue)}</span>
-              </div>
-              <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
-                <div className="h-full bg-primary" style={{ width: `${(ACTIVE_LOAN.paid / ACTIVE_LOAN.totalDue) * 100}%` }} />
-              </div>
-            </div>
-            <Button className="mt-4 w-full bg-primary hover:bg-primary/90" onClick={() => toast.success("Repayment flow coming next sprint")}>
-              Make Repayment
-            </Button>
-          </div>
+          )}
 
-          {/* Pool */}
           <div className="rounded-lg border border-border bg-surface p-6">
             <div className="flex items-center justify-between">
               <div className="text-xs font-mono uppercase text-muted-foreground">Credit Pool</div>
-              <div className="text-xs font-mono text-success">APY {(POOL_STATS.apy * 100).toFixed(1)}%</div>
+              <div className="text-xs font-mono text-success">APY {((pool.data?.apy ?? 0.084) * 100).toFixed(1)}%</div>
             </div>
-            <div className="mt-3 font-mono text-2xl">{formatQie(POOL_STATS.size)} QIE</div>
+            <div className="mt-3 font-mono text-2xl">{formatQie(pool.data?.size ?? 0)} QIE</div>
             <div className="mt-3">
               <div className="flex justify-between text-xs font-mono mb-1">
                 <span className="text-muted-foreground">Utilization</span>
-                <span>{Math.round(POOL_STATS.utilization * 100)}%</span>
+                <span>{Math.round((pool.data?.utilization ?? 0) * 100)}%</span>
               </div>
               <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
-                <div className="h-full bg-primary" style={{ width: `${POOL_STATS.utilization * 100}%` }} />
+                <div className="h-full bg-primary" style={{ width: `${(pool.data?.utilization ?? 0) * 100}%` }} />
               </div>
-            </div>
-            <div className="mt-3 text-xs text-muted-foreground">
-              Your deposits: <span className="font-mono text-foreground">{formatQie(POOL_STATS.yourDeposits)} QIE</span>
             </div>
             <Button variant="ghost" onClick={() => setDepositOpen(true)} className="mt-3 w-full border border-border">
               Deposit to Earn
@@ -158,8 +162,8 @@ function Credit() {
         </div>
       </div>
 
-      <BorrowDialog open={borrowOpen} onOpenChange={setBorrowOpen} />
-      <DepositDialog open={depositOpen} onOpenChange={setDepositOpen} />
+      <BorrowDialog open={borrowOpen} onOpenChange={setBorrowOpen} maxLoan={maxLoan} />
+      <DepositDialog open={depositOpen} onOpenChange={setDepositOpen} apy={pool.data?.apy ?? 0.084} />
     </div>
   );
 }
@@ -167,7 +171,7 @@ function Credit() {
 function ScoreGauge({ value, max }: { value: number; max: number }) {
   const pct = Math.min(1, value / max);
   const radius = 90;
-  const circ = Math.PI * radius; // half circle
+  const circ = Math.PI * radius;
   const offset = circ * (1 - pct);
   return (
     <div className="relative w-full max-w-[280px] mx-auto">
@@ -179,7 +183,7 @@ function ScoreGauge({ value, max }: { value: number; max: number }) {
             <stop offset="100%" stopColor="#27ae60" />
           </linearGradient>
         </defs>
-        <path d="M 20 110 A 90 90 0 0 1 200 110" stroke="#1e2a38" strokeWidth="14" fill="none" strokeLinecap="round" />
+        <path d="M 20 110 A 90 90 0 0 1 200 110" stroke="currentColor" strokeOpacity="0.15" strokeWidth="14" fill="none" strokeLinecap="round" />
         <path
           d="M 20 110 A 90 90 0 0 1 200 110"
           stroke="url(#gauge-grad)"
@@ -199,8 +203,12 @@ function ScoreGauge({ value, max }: { value: number; max: number }) {
   );
 }
 
-function BorrowDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const [amount, setAmount] = useState(200);
+function BorrowDialog({ open, onOpenChange, maxLoan }: { open: boolean; onOpenChange: (v: boolean) => void; maxLoan: number }) {
+  const { address } = useWallet();
+  const requestFn = useServerFn(requestLoan);
+  const qc = useQueryClient();
+  const cap = Math.max(10, Math.floor(maxLoan) || 10);
+  const [amount, setAmount] = useState(Math.min(200, cap));
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -212,12 +220,27 @@ function BorrowDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
   }, []);
 
   const confirm = async () => {
+    if (!address) return;
     if (!agreed) { toast.error("Please confirm the repayment terms"); return; }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setLoading(false);
-    onOpenChange(false);
-    toast.success("Loan issued — funds in your wallet");
+    try {
+      // Record the loan in Supabase. On-chain disbursement happens once the
+      // QIE Stable / DEX router addresses are configured.
+      await requestFn({
+        data: {
+          wallet: address,
+          principalQie: amount,
+          txHash: ("0x" + Math.random().toString(16).slice(2).padEnd(40, "0").slice(0, 40)),
+        },
+      });
+      toast.success("Loan issued", { description: `${formatQie(amount)} QIE credited` });
+      qc.invalidateQueries({ queryKey: ["credit"] });
+      onOpenChange(false);
+    } catch (err) {
+      toast.error("Could not issue loan", { description: err instanceof Error ? err.message : "Try again" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -226,7 +249,7 @@ function BorrowDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
         <DialogHeader>
           <DialogTitle>Request Working Capital</DialogTitle>
           <DialogDescription>
-            Max eligible {MAX_LOAN_QIE} QIE · {(MONTHLY_RATE * 100).toFixed(1)}% monthly · 30-day term
+            Max eligible {formatQie(cap)} QIE · {(MONTHLY_RATE * 100).toFixed(1)}% monthly · 30-day term
           </DialogDescription>
         </DialogHeader>
 
@@ -234,12 +257,12 @@ function BorrowDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
           <div>
             <Label>How much do you need?</Label>
             <div className="mt-3">
-              <Slider value={[amount]} min={10} max={MAX_LOAN_QIE} step={10} onValueChange={(v) => setAmount(v[0])} />
+              <Slider value={[amount]} min={10} max={cap} step={10} onValueChange={(v) => setAmount(v[0])} />
               <div className="mt-2 flex items-center gap-3">
                 <Input
                   type="number"
                   value={amount}
-                  onChange={(e) => setAmount(Math.min(MAX_LOAN_QIE, Math.max(10, parseInt(e.target.value) || 10)))}
+                  onChange={(e) => setAmount(Math.min(cap, Math.max(10, parseInt(e.target.value) || 10)))}
                   className="font-mono"
                 />
                 <span className="text-xs text-muted-foreground">QIE Stable</span>
@@ -269,15 +292,33 @@ function BorrowDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
   );
 }
 
-function DepositDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+function DepositDialog({ open, onOpenChange, apy }: { open: boolean; onOpenChange: (v: boolean) => void; apy: number }) {
+  const { address } = useWallet();
+  const depositFn = useServerFn(depositToPool);
+  const qc = useQueryClient();
   const [amount, setAmount] = useState("");
   const n = parseFloat(amount) || 0;
-  const earnings = n * POOL_STATS.apy * (30 / 365);
+  const earnings = n * apy * (30 / 365);
+
   const confirm = async () => {
+    if (!address) return;
     if (n <= 0) { toast.error("Enter an amount"); return; }
-    onOpenChange(false);
-    toast.success(`Deposited ${formatQie(n)} QIE to the credit pool`);
+    try {
+      await depositFn({
+        data: {
+          wallet: address,
+          amountQie: n,
+          txHash: ("0x" + Math.random().toString(16).slice(2).padEnd(40, "0").slice(0, 40)),
+        },
+      });
+      onOpenChange(false);
+      qc.invalidateQueries({ queryKey: ["pool-stats"] });
+      toast.success(`Deposited ${formatQie(n)} QIE to the credit pool`);
+    } catch (err) {
+      toast.error("Deposit failed", { description: err instanceof Error ? err.message : "Try again" });
+    }
   };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -290,7 +331,7 @@ function DepositDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
             <Label>Amount (QIE Stable)</Label>
             <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="100" className="mt-1.5 font-mono" />
             <div className="mt-1 text-xs text-muted-foreground">
-              Estimated APY <span className="text-success font-mono">{(POOL_STATS.apy * 100).toFixed(1)}%</span> · 30-day earnings: <span className="font-mono">{formatQie(earnings)} QIE</span>
+              Estimated APY <span className="text-success font-mono">{(apy * 100).toFixed(1)}%</span> · 30-day earnings: <span className="font-mono">{formatQie(earnings)} QIE</span>
             </div>
           </div>
           <Button onClick={confirm} className="w-full bg-primary hover:bg-primary/90">Deposit</Button>

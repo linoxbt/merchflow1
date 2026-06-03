@@ -1,14 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpRight, MoreHorizontal, Receipt, Users, DollarSign, RefreshCw, Plus } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { RequireWallet } from "@/components/guards";
 import { useWallet, truncateAddress } from "@/lib/wallet";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { OracleRate } from "@/components/oracle-rate";
-import {
-  MOCK_INVOICES, MOCK_PAYROLL, CREDIT_SCORE, CREDIT_SIGNALS,
-  MAX_LOAN_QIE, ACTIVE_LOAN, formatQie, creditTier,
-} from "@/lib/mock-data";
+import { formatQie, num, creditTier, type InvoiceRow, type PayrollRunRow, type InvoiceStatus } from "@/lib/mock-data";
+import { listInvoicesByMerchant } from "@/lib/invoices.functions";
+import { listPayrollByMerchant } from "@/lib/payroll.functions";
+import { getCreditProfile } from "@/lib/credit.functions";
+import { useQieOracle, useQieStableBalance } from "@/lib/qie-hooks";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — MerchFlow" }] }),
@@ -17,14 +20,44 @@ export const Route = createFileRoute("/dashboard")({
 
 function Dashboard() {
   const { merchant, address } = useWallet();
-  const invoices = MOCK_INVOICES.slice(0, 5);
-  const pendingCount = MOCK_INVOICES.filter((i) => i.status === "pending" || i.status === "overdue").length;
-  const pendingTotal = MOCK_INVOICES.filter((i) => i.status === "pending" || i.status === "overdue").reduce((s, i) => s + i.amountQie, 0);
-  const revenue30d = MOCK_INVOICES.filter((i) => i.status === "paid").reduce((s, i) => s + i.amountQie, 0);
+  const stable = useQieStableBalance(address as `0x${string}` | undefined);
+  const oracle = useQieOracle();
+  const listInv = useServerFn(listInvoicesByMerchant);
+  const listPay = useServerFn(listPayrollByMerchant);
+  const credit = useServerFn(getCreditProfile);
+
+  const invQuery = useQuery({
+    queryKey: ["invoices", address?.toLowerCase()],
+    enabled: !!address,
+    queryFn: () => listInv({ data: { wallet: address! } }),
+  });
+  const payQuery = useQuery({
+    queryKey: ["payroll", address?.toLowerCase()],
+    enabled: !!address,
+    queryFn: () => listPay({ data: { wallet: address! } }),
+  });
+  const creditQuery = useQuery({
+    queryKey: ["credit", address?.toLowerCase()],
+    enabled: !!address,
+    queryFn: () => credit({ data: { wallet: address! } }),
+  });
+
+  const invoices = (invQuery.data?.invoices ?? []) as InvoiceRow[];
+  const recent = invoices.slice(0, 5);
+  const pending = invoices.filter((i) => i.status === "pending" || i.status === "overdue");
+  const pendingTotal = pending.reduce((s, i) => s + num(i.amount_qie), 0);
+  const revenue30d = invoices
+    .filter((i) => i.status === "paid")
+    .reduce((s, i) => s + num(i.amount_qie), 0);
+
+  const runs = (payQuery.data?.runs ?? []) as PayrollRunRow[];
+  const creditData = creditQuery.data;
+  const score = creditData?.score ?? 0;
+  const maxLoan = creditData?.maxLoanQie ?? 0;
+  const activeLoan = creditData?.activeLoan ?? null;
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8">
-      {/* Business header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
@@ -51,114 +84,131 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          label="Revenue (30d)"
+          label="Revenue (all-time)"
           value={`${formatQie(revenue30d)} QIE`}
-          sub={<span className="text-success">↑ 18% from last month</span>}
+          sub={invoices.filter((i) => i.status === "paid").length + " paid invoices"}
         />
         <StatCard
           label="Unpaid Invoices"
-          value={String(pendingCount)}
+          value={String(pending.length)}
           valueClass="text-warning"
-          sub={<>Total: {formatQie(pendingTotal)} QIE outstanding</>}
+          sub={`${formatQie(pendingTotal)} QIE outstanding`}
         />
         <StatCard
           label="Business Credit Score"
-          value={String(CREDIT_SCORE)}
+          value={String(score)}
           valueClass="text-primary"
           sub={
             <div className="space-y-1">
               <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
-                <div className="h-full gradient-credit" style={{ width: `${(CREDIT_SCORE / 800) * 100}%` }} />
+                <div className="h-full gradient-credit" style={{ width: `${Math.min(100, (score / 800) * 100)}%` }} />
               </div>
-              <div>{creditTier(CREDIT_SCORE)} — eligible for up to {MAX_LOAN_QIE} QIE</div>
+              <div>{creditTier(score)} — eligible for up to {formatQie(maxLoan)} QIE</div>
             </div>
           }
         />
         <StatCard
-          label="Active Credit"
-          value={`${formatQie(ACTIVE_LOAN.borrowed)} QIE`}
+          label={stable.configured ? "QIE Stable Balance" : "Active Credit"}
+          value={
+            stable.configured
+              ? `${formatQie(stable.balance ?? 0)} QIE`
+              : activeLoan
+                ? `${formatQie(num(activeLoan.principal_qie))} QIE`
+                : "0 QIE"
+          }
           sub={
-            <Link to="/credit" className="text-primary inline-flex items-center gap-1 hover:underline">
-              Next due {ACTIVE_LOAN.dueDate} <ArrowUpRight className="h-3 w-3" />
-            </Link>
+            activeLoan ? (
+              <Link to="/credit" className="text-primary inline-flex items-center gap-1 hover:underline">
+                Next due {activeLoan.due_date} <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            ) : (
+              <span className="text-muted-foreground">No active loan</span>
+            )
           }
         />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left: tables */}
         <div className="lg:col-span-2 space-y-6">
           <SectionCard
-            title="Invoices"
+            title="Recent Invoices"
             action={<Link to="/invoices" className="text-xs text-primary hover:underline">View All →</Link>}
           >
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[10px] font-mono uppercase text-muted-foreground border-b border-border">
-                    <th className="py-2 pr-3">Invoice</th>
-                    <th className="py-2 pr-3">Customer</th>
-                    <th className="py-2 pr-3 text-right">Amount</th>
-                    <th className="py-2 pr-3">Date</th>
-                    <th className="py-2 pr-3">Status</th>
-                    <th className="py-2 w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((inv) => (
-                    <tr key={inv.id} className="border-b border-border last:border-0">
-                      <td className="py-3 pr-3 font-mono">{inv.id}</td>
-                      <td className="py-3 pr-3 font-mono text-muted-foreground">{truncateAddress(inv.customer)}</td>
-                      <td className="py-3 pr-3 text-right font-mono">{formatQie(inv.amountQie)} QIE</td>
-                      <td className="py-3 pr-3 text-muted-foreground">{inv.createdAt}</td>
-                      <td className="py-3 pr-3"><StatusBadge status={inv.status} /></td>
-                      <td className="py-3"><MoreHorizontal className="h-4 w-4 text-muted-foreground" /></td>
+            {recent.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">No invoices yet. Create your first one.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] font-mono uppercase text-muted-foreground border-b border-border">
+                      <th className="py-2 pr-3">Invoice</th>
+                      <th className="py-2 pr-3">Customer</th>
+                      <th className="py-2 pr-3 text-right">Amount</th>
+                      <th className="py-2 pr-3">Date</th>
+                      <th className="py-2 pr-3">Status</th>
+                      <th className="py-2 w-8"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {recent.map((inv) => (
+                      <tr key={inv.id} className="border-b border-border last:border-0">
+                        <td className="py-3 pr-3 font-mono">{inv.number}</td>
+                        <td className="py-3 pr-3 font-mono text-muted-foreground">{truncateAddress(inv.customer_wallet)}</td>
+                        <td className="py-3 pr-3 text-right font-mono">{formatQie(num(inv.amount_qie))} QIE</td>
+                        <td className="py-3 pr-3 text-muted-foreground">{inv.created_at.slice(0, 10)}</td>
+                        <td className="py-3 pr-3"><StatusBadge status={inv.status as InvoiceStatus} /></td>
+                        <td className="py-3"><MoreHorizontal className="h-4 w-4 text-muted-foreground" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </SectionCard>
 
           <SectionCard
             title="Payroll History"
             action={<Link to="/payroll" className="text-xs text-primary hover:underline">View All →</Link>}
           >
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[10px] font-mono uppercase text-muted-foreground border-b border-border">
-                  <th className="py-2 pr-3">Date</th>
-                  <th className="py-2 pr-3">Recipients</th>
-                  <th className="py-2 pr-3 text-right">Total Sent</th>
-                  <th className="py-2 pr-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {MOCK_PAYROLL.map((p) => (
-                  <tr key={p.id} className="border-b border-border last:border-0">
-                    <td className="py-3 pr-3 text-muted-foreground">{p.date}</td>
-                    <td className="py-3 pr-3 font-mono">{p.recipients.length}</td>
-                    <td className="py-3 pr-3 text-right font-mono">{formatQie(p.totalQie)} QIE</td>
-                    <td className="py-3 pr-3"><StatusBadge status={p.status} /></td>
+            {runs.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">No payroll runs yet.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[10px] font-mono uppercase text-muted-foreground border-b border-border">
+                    <th className="py-2 pr-3">Run</th>
+                    <th className="py-2 pr-3">Date</th>
+                    <th className="py-2 pr-3">Recipients</th>
+                    <th className="py-2 pr-3 text-right">Total Sent</th>
+                    <th className="py-2 pr-3">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {runs.slice(0, 5).map((p) => (
+                    <tr key={p.id} className="border-b border-border last:border-0">
+                      <td className="py-3 pr-3 font-mono">{p.number}</td>
+                      <td className="py-3 pr-3 text-muted-foreground">{p.created_at.slice(0, 10)}</td>
+                      <td className="py-3 pr-3 font-mono">{p.recipient_count}</td>
+                      <td className="py-3 pr-3 text-right font-mono">{formatQie(num(p.total_qie))} QIE</td>
+                      <td className="py-3 pr-3"><StatusBadge status={p.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </SectionCard>
         </div>
 
-        {/* Right: credit + quick actions */}
         <div className="space-y-6">
           <SectionCard title="Credit Score Breakdown">
             <div className="text-center mb-4">
-              <div className="font-mono text-4xl text-primary">{CREDIT_SCORE}</div>
-              <div className="text-xs text-muted-foreground mt-1">{creditTier(CREDIT_SCORE)} Standing</div>
+              <div className="font-mono text-4xl text-primary">{score}</div>
+              <div className="text-xs text-muted-foreground mt-1">{creditTier(score)} Standing</div>
             </div>
             <div className="space-y-3">
-              {CREDIT_SIGNALS.map((s) => (
+              {(creditData?.signals ?? []).map((s) => (
                 <div key={s.name}>
                   <div className="flex justify-between text-xs font-mono mb-1">
                     <span className="text-muted-foreground">{s.name}</span>
@@ -185,9 +235,10 @@ function Dashboard() {
           </SectionCard>
 
           <SectionCard title="Current Rate">
-            <div className="font-mono text-xl">1 USD = 1.024 QIE Stable</div>
-            <div className="text-[11px] text-muted-foreground mt-1">Live via QIE Oracle · Updated 2min ago</div>
-            <div className="text-[11px] text-muted-foreground mt-2">All invoice amounts are converted at this rate</div>
+            <div className="font-mono text-xl">1 USD = {oracle.rate.toFixed(3)} QIE Stable</div>
+            <div className="text-[11px] text-muted-foreground mt-1">
+              {oracle.live ? "Live via QIE Oracle" : "Fallback rate — oracle not configured"}
+            </div>
             <OracleRate className="mt-3" />
           </SectionCard>
         </div>
