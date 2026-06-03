@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { registerMerchant } from "@/lib/merchants.functions";
+import { useQiePass } from "@/lib/qie-hooks";
+import { useAccount } from "wagmi";
 
 export const Route = createFileRoute("/onboard")({
   head: () => ({ meta: [{ title: "Onboard — MerchFlow" }] }),
@@ -25,8 +27,9 @@ function Onboard() {
   const { address, connected, qiePassVerified, setPassVerified, merchant, setMerchant } = useWallet();
   const navigate = useNavigate();
   const registerFn = useServerFn(registerMerchant);
+  const { address: wagmiAddress } = useAccount();
+  const pass = useQiePass(wagmiAddress);
   const [step, setStep] = useState(qiePassVerified ? 2 : 1);
-  const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     businessName: "",
@@ -41,12 +44,23 @@ function Onboard() {
   }, [connected, merchant, navigate]);
 
   const checkPass = async () => {
-    setChecking(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setPassVerified(true);
-    setChecking(false);
-    toast.success("QIE Pass verified");
-    setStep(2);
+    if (!pass.configured) {
+      // QIE Pass contract not configured yet — allow proceeding so the app is usable.
+      setPassVerified(true);
+      toast.message("QIE Pass contract not configured", {
+        description: "Skipping on-chain check. Set VITE_QIE_PASS_TESTNET to enforce.",
+      });
+      setStep(2);
+      return;
+    }
+    const { data } = await pass.refetch();
+    if ((data ?? 0n) > 0n) {
+      setPassVerified(true);
+      toast.success("QIE Pass verified on-chain");
+      setStep(2);
+    } else {
+      toast.error("No QIE Pass found in this wallet");
+    }
   };
 
   const submit = async () => {
@@ -104,13 +118,13 @@ function Onboard() {
           <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
             MerchFlow requires a verified QIE Pass to register as a merchant. This ensures only real businesses can create invoices and access credit.
           </p>
-          {qiePassVerified ? (
+          {qiePassVerified || pass.verified ? (
             <div className="mt-6 inline-flex items-center gap-2 text-success text-sm font-mono">
               <Check className="h-4 w-4" /> QIE Pass verified
             </div>
           ) : (
-            <Button onClick={checkPass} disabled={checking} className="mt-6 bg-primary hover:bg-primary/90">
-              {checking ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Checking…</>) : "Check QIE Pass Status"}
+            <Button onClick={checkPass} disabled={pass.isLoading} className="mt-6 bg-primary hover:bg-primary/90">
+              {pass.isLoading ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Checking…</>) : "Check QIE Pass Status"}
             </Button>
           )}
 
