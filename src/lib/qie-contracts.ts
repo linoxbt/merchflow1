@@ -18,6 +18,22 @@ function env(name: string): Addr {
   return v as `0x${string}`;
 }
 
+/**
+ * Officially-documented QIE mainnet addresses (see qiedex.qie.digital
+ * and qi-blockchain.gitbook.io/qie-oracle). Env vars override these.
+ * QIE Pass has no public contract address yet — leave null.
+ * QIE testnet has no published Stable / Oracle / DEX contracts.
+ */
+const MAINNET_DEFAULTS = {
+  pass: null as Addr,
+  stable: "0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5" as `0x${string}`, // QUSDC
+  oracle: "0x9E596d809a20A272c788726f592c0d1629755440" as `0x${string}`,
+  dexRouter: "0x08cd2e72e156D8563B4351eb4065C262A9f553Ef" as `0x${string}`, // QIEDEX Router (Uniswap V2)
+};
+
+export const WQIE_MAINNET: `0x${string}` = "0x0087904D95BEe9E5F24dc8852804b547981A9139";
+export const QIE_DEX_FACTORY_MAINNET: `0x${string}` = "0x8E23128a5511223bE6c0d64106e2D4508C08398C";
+
 export type QieContracts = {
   pass: Addr;
   stable: Addr;
@@ -33,10 +49,10 @@ export const QIE_CONTRACTS: Record<number, QieContracts> = {
     dexRouter: env("VITE_QIE_DEX_TESTNET"),
   },
   [qieMainnet.id]: {
-    pass: env("VITE_QIE_PASS_MAINNET"),
-    stable: env("VITE_QIE_STABLE_MAINNET"),
-    oracle: env("VITE_QIE_ORACLE_MAINNET"),
-    dexRouter: env("VITE_QIE_DEX_MAINNET"),
+    pass: env("VITE_QIE_PASS_MAINNET") ?? MAINNET_DEFAULTS.pass,
+    stable: env("VITE_QIE_STABLE_MAINNET") ?? MAINNET_DEFAULTS.stable,
+    oracle: env("VITE_QIE_ORACLE_MAINNET") ?? MAINNET_DEFAULTS.oracle,
+    dexRouter: env("VITE_QIE_DEX_MAINNET") ?? MAINNET_DEFAULTS.dexRouter,
   },
 };
 
@@ -86,22 +102,33 @@ export const ERC20_ABI = [
   },
 ] as const;
 
-/** Chainlink-style oracle `latestAnswer()` (USD/QIE, 8 decimals). */
-export const ORACLE_LATEST_ANSWER_ABI = [
+/** QIE Oracle: `getPrice(string asset) view returns (uint256)`. */
+export const QIE_ORACLE_ABI = [
   {
-    inputs: [],
-    name: "latestAnswer",
-    outputs: [{ name: "", type: "int256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "decimals",
-    outputs: [{ name: "", type: "uint8" }],
+    inputs: [{ name: "asset", type: "string" }],
+    name: "getPrice",
+    outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
     type: "function",
   },
 ] as const;
 
-export const ORACLE_FALLBACK_RATE = 1.024; // 1 USD = 1.024 QIE Stable
+/** Uniswap V2 router subset used for swap quotes. */
+export const UNI_V2_ROUTER_ABI = [
+  {
+    inputs: [
+      { name: "amountIn", type: "uint256" },
+      { name: "path", type: "address[]" },
+    ],
+    name: "getAmountsOut",
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
+/**
+ * QUSDC is a USDC-pegged stablecoin (1 QUSDC ≈ 1 USD), so 1 USD ≈ 1 QUSDC.
+ * This is the canonical fallback when on-chain rate fetch isn't available.
+ */
+export const ORACLE_FALLBACK_RATE = 1.0;

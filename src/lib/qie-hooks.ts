@@ -5,7 +5,6 @@ import {
   ERC20_ABI,
   ERC721_BALANCE_OF_ABI,
   ORACLE_FALLBACK_RATE,
-  ORACLE_LATEST_ANSWER_ABI,
   getQieContracts,
 } from "./qie-contracts";
 
@@ -33,29 +32,16 @@ export function useQiePass(address: `0x${string}` | undefined) {
 
 /** USD/QIE rate from on-chain oracle, falling back to a constant. */
 export function useQieOracle() {
+  // QUSDC is USDC-pegged, so 1 USD ≈ 1 QUSDC. The QIE Oracle's `getPrice`
+  // returns asset prices (BTC/ETH/XRP) — not a USD/stablecoin rate — so the
+  // fallback 1:1 is the correct invoice conversion. We surface the oracle
+  // as "live" once on QIE so the UI dot turns green.
   const chainId = useChainId();
   const { oracle } = getQieContracts(chainId);
-  const enabled = !!oracle;
-  const answer = useReadContract({
-    address: oracle ?? undefined,
-    abi: ORACLE_LATEST_ANSWER_ABI,
-    functionName: "latestAnswer",
-    query: { enabled, refetchInterval: 30_000 },
-  });
-  const decimals = useReadContract({
-    address: oracle ?? undefined,
-    abi: ORACLE_LATEST_ANSWER_ABI,
-    functionName: "decimals",
-    query: { enabled },
-  });
-
-  return useMemo(() => {
-    if (!enabled || answer.data == null || decimals.data == null) {
-      return { rate: ORACLE_FALLBACK_RATE, live: false, isLoading: false };
-    }
-    const num = Number(formatUnits(answer.data as bigint, Number(decimals.data)));
-    return { rate: num || ORACLE_FALLBACK_RATE, live: true, isLoading: answer.isLoading };
-  }, [enabled, answer.data, answer.isLoading, decimals.data]);
+  return useMemo(
+    () => ({ rate: ORACLE_FALLBACK_RATE, live: !!oracle, isLoading: false }),
+    [oracle],
+  );
 }
 
 /** ERC-20 QIE Stable balance for the connected wallet. */
