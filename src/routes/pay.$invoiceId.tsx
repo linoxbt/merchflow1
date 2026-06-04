@@ -7,7 +7,7 @@ import { parseEther, parseUnits } from "viem";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
-import { formatQie, num, type InvoiceRow } from "@/lib/mock-data";
+import { formatQie, num, type InvoiceRow } from "@/lib/types";
 import { qieMainnet, qieTestnet } from "@/lib/chains";
 import { getInvoiceByNumber, markInvoicePaid } from "@/lib/invoices.functions";
 import { getQieContracts, ERC20_ABI } from "@/lib/qie-contracts";

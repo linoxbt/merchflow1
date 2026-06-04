@@ -3,7 +3,7 @@ import { Receipt, Users, DollarSign, ArrowDownLeft, UserPlus } from "lucide-reac
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getProtocolStats, getTopMerchants } from "@/lib/activity.functions";
-import { formatQie, num, relativeTime, type ActivityRow } from "@/lib/mock-data";
+import { formatQie, num, relativeTime, type ActivityRow } from "@/lib/types";
 import { truncateAddress } from "@/lib/wallet";
 
 export const Route = createFileRoute("/explore")({

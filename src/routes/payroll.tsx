@@ -7,7 +7,7 @@ import { RequireWallet } from "@/components/guards";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { useWallet } from "@/lib/wallet";
-import { formatQie, num, type PayrollRunRow, type PayrollRecipientRow } from "@/lib/mock-data";
+import { formatQie, num, type PayrollRunRow, type PayrollRecipientRow } from "@/lib/types";
 import { listPayrollByMerchant } from "@/lib/payroll.functions";
 import { qieTestnet } from "@/lib/chains";
 import { toast } from "sonner";

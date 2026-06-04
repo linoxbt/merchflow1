@@ -6,7 +6,7 @@ import { useWallet } from "@/lib/wallet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { redeemClaimCode } from "@/lib/payroll.functions";
-import { formatQie, num, type PayrollRecipientRow } from "@/lib/mock-data";
+import { formatQie, num, type PayrollRecipientRow } from "@/lib/types";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/claim")({
