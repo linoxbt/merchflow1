@@ -4,6 +4,7 @@ import { TopNav } from "./top-nav";
 import { DevConsole } from "./dev-console";
 import { DemoBanner } from "./demo-banner";
 import { WrongChainBanner } from "./wrong-chain-banner";
+import { BackButton } from "./back-button";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -14,6 +15,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {!isPublicPay && <DemoBanner />}
       <WrongChainBanner />
       <TopNav transparent={isLanding} />
+      {!isLanding && <BackButton />}
       <main className="flex-1 pb-12">{children}</main>
       <DevConsole />
     </div>
