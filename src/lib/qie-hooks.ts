@@ -5,6 +5,7 @@ import {
   ERC20_ABI,
   ERC721_BALANCE_OF_ABI,
   ORACLE_FALLBACK_RATE,
+  QIE_ORACLE_ABI,
   getQieContracts,
 } from "./qie-contracts";
 
@@ -18,7 +19,7 @@ export function useQiePass(address: `0x${string}` | undefined) {
     abi: ERC721_BALANCE_OF_ABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: { enabled },
+    query: { enabled, refetchInterval: 30_000 },
   });
 
   return {
@@ -30,18 +31,39 @@ export function useQiePass(address: `0x${string}` | undefined) {
   };
 }
 
-/** USD/QIE rate from on-chain oracle, falling back to a constant. */
+/**
+ * On-chain rate feed for invoice math.
+ *
+ * Invoice unit is QUSDC (USD-pegged), so the USD→QUSDC `rate` is always 1.
+ * We additionally call the QIE Oracle's `getPrice("QIE")` so the UI can show
+ * a live native-QIE price and prove the oracle is reachable on-chain.
+ * `live` flips true only when the oracle contract actually returns a value.
+ */
 export function useQieOracle() {
-  // QUSDC is USDC-pegged, so 1 USD ≈ 1 QUSDC. The QIE Oracle's `getPrice`
-  // returns asset prices (BTC/ETH/XRP) — not a USD/stablecoin rate — so the
-  // fallback 1:1 is the correct invoice conversion. We surface the oracle
-  // as "live" once on QIE so the UI dot turns green.
   const chainId = useChainId();
   const { oracle } = getQieContracts(chainId);
-  return useMemo(
-    () => ({ rate: ORACLE_FALLBACK_RATE, live: !!oracle, isLoading: false }),
-    [oracle],
-  );
+  const enabled = !!oracle;
+
+  const { data, isLoading, isError } = useReadContract({
+    address: oracle ?? undefined,
+    abi: QIE_ORACLE_ABI,
+    functionName: "getPrice",
+    args: ["QIE"],
+    query: { enabled, refetchInterval: 30_000 },
+  });
+
+  return useMemo(() => {
+    // QIE Oracle follows Chainlink conventions: uint256 price with 8 decimals.
+    const raw = (data as bigint | undefined) ?? 0n;
+    const qiePriceUsd = raw > 0n ? Number(formatUnits(raw, 8)) : null;
+    return {
+      rate: ORACLE_FALLBACK_RATE, // 1 USD = 1 QUSDC (peg)
+      qiePriceUsd,
+      configured: enabled,
+      live: enabled && !isError && raw > 0n,
+      isLoading: enabled && isLoading,
+    };
+  }, [data, enabled, isError, isLoading]);
 }
 
 /** ERC-20 QIE Stable balance for the connected wallet. */
