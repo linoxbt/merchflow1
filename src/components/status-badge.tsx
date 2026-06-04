@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { InvoiceStatus } from "@/lib/mock-data";
+import type { InvoiceStatus } from "@/lib/types";
 
 const STYLES: Record<string, string> = {
   paid: "bg-success/15 text-success border-success/30",

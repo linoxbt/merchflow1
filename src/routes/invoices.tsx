@@ -16,7 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { formatQie, num, type InvoiceRow, type InvoiceStatus } from "@/lib/mock-data";
+import { formatQie, num, type InvoiceRow, type InvoiceStatus } from "@/lib/types";
 import { useWallet, truncateAddress } from "@/lib/wallet";
 import { useQieOracle } from "@/lib/qie-hooks";
 import { createInvoice, listInvoicesByMerchant } from "@/lib/invoices.functions";

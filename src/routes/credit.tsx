@@ -13,7 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useWallet } from "@/lib/wallet";
-import { creditTier, formatQie, MONTHLY_RATE, num } from "@/lib/mock-data";
+import { creditTier, formatQie, MONTHLY_RATE, num } from "@/lib/types";
 import { getCreditProfile, getPoolStats, requestLoan, depositToPool } from "@/lib/credit.functions";
 import { toast } from "sonner";
 

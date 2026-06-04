@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { OracleRate } from "@/components/oracle-rate";
-import { formatQie, num, type PayrollRecipientRow, type PayrollRunRow } from "@/lib/mock-data";
+import { formatQie, num, type PayrollRecipientRow, type PayrollRunRow } from "@/lib/types";
 import { useWallet } from "@/lib/wallet";
 import { useQieOracle, useQieStableBalance } from "@/lib/qie-hooks";
 import { createPayrollRun } from "@/lib/payroll.functions";

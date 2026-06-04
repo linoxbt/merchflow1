@@ -7,7 +7,7 @@ import { useWallet, truncateAddress } from "@/lib/wallet";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { OracleRate } from "@/components/oracle-rate";
-import { formatQie, num, creditTier, type InvoiceRow, type PayrollRunRow, type InvoiceStatus } from "@/lib/mock-data";
+import { formatQie, num, creditTier, type InvoiceRow, type PayrollRunRow, type InvoiceStatus } from "@/lib/types";
 import { listInvoicesByMerchant } from "@/lib/invoices.functions";
 import { listPayrollByMerchant } from "@/lib/payroll.functions";
 import { getCreditProfile } from "@/lib/credit.functions";
