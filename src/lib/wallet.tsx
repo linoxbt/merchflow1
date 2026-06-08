@@ -7,9 +7,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useAccount, useChainId, useConnect, useDisconnect, useReadContract } from "wagmi";
 import { getMerchantByWallet } from "@/lib/merchants.functions";
 import { qieTestnet } from "@/lib/chains";
+import { getQieContracts, hasQieMerchantRegistry } from "@/lib/qie-contracts";
+import {
+  MERCHANT_REGISTRY_ABI,
+  isRegisteredMerchantRow,
+  merchantProfileFromRegistry,
+  type MerchantRegistryRow,
+} from "@/lib/merchant-registry";
 import { toast } from "sonner";
 
 export const QIE_WALLET_URL = "https://www.qiewallet.me/";
@@ -21,12 +28,16 @@ export type MerchantProfile = {
   description?: string;
   website?: string;
   registeredAt: number;
+  metadataHash?: `0x${string}`;
+  categoryHash?: `0x${string}`;
+  source?: "local" | "supabase" | "onchain";
 };
 
 type WalletState = {
   address: string | null;
   connected: boolean;
   connecting: boolean;
+  merchantLoading: boolean;
   merchant: MerchantProfile | null;
   connect: () => void;
   disconnect: () => void;
@@ -54,24 +65,51 @@ function writeStore(s: StoredByAddress) {
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { address: wagmiAddress, isConnected } = useAccount();
+  const chainId = useChainId();
   const { disconnect: wagmiDisconnect } = useDisconnect();
   const { connectAsync, connectors, isPending: connecting } = useConnect();
 
   const address = wagmiAddress ?? null;
+  const { merchantRegistry } = getQieContracts(chainId);
+  const anyRegistryConfigured = hasQieMerchantRegistry();
   const [merchant, setMerchantState] = useState<MerchantProfile | null>(null);
+  const [merchantLoading, setMerchantLoading] = useState(false);
+
+  const registry = useReadContract({
+    address: merchantRegistry ?? undefined,
+    abi: MERCHANT_REGISTRY_ABI,
+    functionName: "getMerchant",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!merchantRegistry && !!address,
+      refetchInterval: 15_000,
+    },
+  });
 
   // Load per-address profile when address changes
   useEffect(() => {
     if (!address) {
       setMerchantState(null);
+      setMerchantLoading(false);
       return;
     }
     const store = readStore();
     const entry = store[address.toLowerCase()];
     setMerchantState(entry?.merchant ?? null);
 
-    // Hydrate from Supabase (source of truth)
+    if (anyRegistryConfigured) {
+      if (!merchantRegistry) {
+        setMerchantState(null);
+        setMerchantLoading(false);
+        return;
+      }
+      setMerchantLoading(true);
+      return;
+    }
+
+    // Supabase remains a fallback only until a merchant registry is deployed/configured.
     let cancelled = false;
+    setMerchantLoading(!entry?.merchant);
     getMerchantByWallet({ data: { wallet: address } })
       .then(({ merchant: row }) => {
         if (cancelled || !row) return;
@@ -82,6 +120,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           description: row.description ?? "",
           website: row.website ?? "",
           registeredAt: row.onboarded_at ? new Date(row.onboarded_at).getTime() : Date.now(),
+          source: "supabase",
         };
         setMerchantState(hydrated);
         const store2 = readStore();
@@ -90,11 +129,41 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         };
         writeStore(store2);
       })
-      .catch((err) => console.error("Failed to load merchant", err));
+      .catch((err) => console.error("Failed to load merchant", err))
+      .finally(() => {
+        if (!cancelled) setMerchantLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [address]);
+  }, [address, anyRegistryConfigured, merchantRegistry]);
+
+  useEffect(() => {
+    if (!address || !merchantRegistry) return;
+    if (registry.isLoading) {
+      setMerchantLoading(true);
+      return;
+    }
+    if (registry.error) {
+      console.error("Failed to load on-chain merchant", registry.error);
+      setMerchantLoading(false);
+      return;
+    }
+
+    const row = registry.data as MerchantRegistryRow | undefined;
+    const store = readStore();
+    const cached = store[address.toLowerCase()]?.merchant;
+
+    if (isRegisteredMerchantRow(row)) {
+      const hydrated = merchantProfileFromRegistry(row, address, cached);
+      setMerchantState(hydrated);
+      store[address.toLowerCase()] = { merchant: hydrated };
+      writeStore(store);
+    } else if (registry.data) {
+      setMerchantState(null);
+    }
+    setMerchantLoading(false);
+  }, [address, merchantRegistry, registry.data, registry.error, registry.isLoading]);
 
   const persist = useCallback(
     (patch: { merchant?: MerchantProfile | null }) => {
@@ -157,12 +226,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       address,
       connected: isConnected && !!address,
       connecting,
+      merchantLoading,
       merchant,
       connect,
       disconnect,
       setMerchant,
     }),
-    [address, isConnected, connecting, merchant, connect, disconnect, setMerchant],
+    [address, isConnected, connecting, merchantLoading, merchant, connect, disconnect, setMerchant],
   );
 
   return <WalletCtx.Provider value={value}>{children}</WalletCtx.Provider>;

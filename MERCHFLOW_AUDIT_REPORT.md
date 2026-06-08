@@ -17,8 +17,9 @@ The current implementation is now more honest about QIE integrations:
 - QIE Stable is read-only: the app displays the connected wallet balance as a reference.
 - QIE DEX is linked only when the user has a low native QIE gas balance.
 - QIE Pass and QIE Oracle have been removed because they did not align with the current product flow.
+- A first on-chain `MerchantRegistry` contract is now implemented for merchant registration proof.
 
-The largest remaining weakness is still source-of-truth integrity. Supabase stores merchants, invoices, payroll, loans, pool deposits, and activity. Several server functions accept wallet addresses and transaction hashes from the browser without signature/session binding or server-side chain verification.
+The largest remaining weakness is still source-of-truth integrity outside merchant registration. Supabase still stores invoices, payroll, loans, pool deposits, and activity. Several server functions accept wallet addresses and transaction hashes from the browser without signature/session binding or server-side chain verification.
 
 ## Sources Checked
 
@@ -88,6 +89,28 @@ Fixed two likely causes:
 - Nitro Vercel preset is forced in `vite.config.ts`, and `vercel.json` uses the TanStack Start framework preset.
 - Build script uses a larger Node heap to avoid production-build OOM.
 
+### Merchant Registry Contract
+
+Added:
+
+- `contracts/MerchantRegistry.sol`
+- `foundry.toml`
+- `test/MerchantRegistry.t.sol`
+- `docs/contracts.md`
+- frontend registry ABI/hash helpers in `src/lib/merchant-registry.ts`
+
+The contract stores:
+
+- merchant wallet
+- profile metadata hash
+- category hash
+- onboarding timestamp
+- active status
+
+When `VITE_QIE_MERCHANT_REGISTRY_TESTNET` is configured, onboarding registers the connected wallet on-chain through QIE Wallet. Wallet hydration then reads the registry before allowing a connected user through protected merchant routes.
+
+Readable business metadata is still not decentralized. The app hashes a canonical merchant profile JSON and stores that hash on-chain. The next step is to store the readable JSON on IPFS/Arweave and keep only its hash on-chain.
+
 ## What Is Well Implemented
 
 ### Product Concept
@@ -105,6 +128,10 @@ The app has a coherent merchant operating-system story:
 ### QIE Network Setup
 
 `src/lib/chains.ts` correctly configures QIE mainnet/testnet chain IDs, RPC URLs, symbols, and explorers.
+
+### First On-Chain Migration Step
+
+Merchant registration now has a real contract path instead of being only a Supabase row. This is the correct first primitive because every invoice, payroll run, and credit product depends on merchant identity.
 
 ### Payment UX
 
@@ -202,7 +229,6 @@ Add tests for:
 
 Right now, yes. The current app requires Supabase for:
 
-- merchants
 - invoices
 - payroll runs
 - payroll recipients
@@ -211,23 +237,26 @@ Right now, yes. The current app requires Supabase for:
 - pool deposits
 - activity feed
 
+Merchant registration can now move on-chain once `MerchantRegistry` is deployed and `VITE_QIE_MERCHANT_REGISTRY_TESTNET` is configured. Supabase remains a fallback only when no registry is configured.
+
 The product does not inherently require Supabase. Supabase is being used as the source of truth for a prototype.
 
 To make it fully on-chain, replace those tables with contracts and use an indexer only for fast UI reads.
 
 ## What Is Left To Make It Fully On-Chain
 
-1. Merchant registry contract.
-2. Invoice registry plus payment confirmation contract.
-3. Payroll batch transfer or payroll escrow contract.
-4. Claim-code escrow using hashed secrets or signed claims.
-5. Lending pool contract for deposits, borrows, repayments, interest, and defaults.
-6. Server-side or indexer-backed tx verification until the UI reads fully from chain.
-7. Wallet-signature authentication for all server mutations that remain.
-8. Event indexer for dashboard/history queries.
+1. Deploy `MerchantRegistry` on QIE testnet and add `VITE_QIE_MERCHANT_REGISTRY_TESTNET`.
+2. Move readable merchant metadata to IPFS/Arweave and store only its content hash on-chain.
+3. Invoice registry plus payment confirmation contract.
+4. Payroll batch transfer or payroll escrow contract.
+5. Claim-code escrow using hashed secrets or signed claims.
+6. Lending pool contract for deposits, borrows, repayments, interest, and defaults.
+7. Server-side or indexer-backed tx verification until the UI reads fully from chain.
+8. Wallet-signature authentication for all server mutations that remain.
+9. Event indexer for dashboard/history queries.
 
 ## Final Assessment
 
 Current readiness: strong hackathon demo, not production payment infrastructure.
 
-The most important next engineering step is server-side transaction verification for invoice payments. That would turn the strongest user-facing flow into a defensible real payment flow.
+The most important next engineering step is deploying the merchant registry on QIE testnet, then building the invoice registry/payment confirmation contract. That turns onboarding and the strongest user-facing payment flow into defensible on-chain primitives.
