@@ -25,26 +25,48 @@ export const QIE_ACCOUNTING_RATE = 1.0;
 export type QieContracts = {
   stable: Addr;
   merchantRegistry: Addr;
+  invoiceRegistry: Addr;
 };
 
 export const QIE_CONTRACTS: Record<number, QieContracts> = {
   [qieTestnet.id]: {
     stable: env("VITE_QIE_STABLE_TESTNET"),
     merchantRegistry: env("VITE_QIE_MERCHANT_REGISTRY_TESTNET"),
+    invoiceRegistry: env("VITE_QIE_INVOICE_REGISTRY_TESTNET"),
   },
   [qieMainnet.id]: {
     stable: env("VITE_QIE_STABLE_MAINNET") ?? MAINNET_DEFAULTS.stable,
     merchantRegistry: env("VITE_QIE_MERCHANT_REGISTRY_MAINNET"),
+    invoiceRegistry: env("VITE_QIE_INVOICE_REGISTRY_MAINNET"),
   },
 };
 
 export function getQieContracts(chainId: number | undefined): QieContracts {
-  if (chainId == null) return { stable: null, merchantRegistry: null };
-  return QIE_CONTRACTS[chainId] ?? { stable: null, merchantRegistry: null };
+  if (chainId == null) return { stable: null, merchantRegistry: null, invoiceRegistry: null };
+  return QIE_CONTRACTS[chainId] ?? { stable: null, merchantRegistry: null, invoiceRegistry: null };
 }
 
 export function hasQieMerchantRegistry() {
   return Object.values(QIE_CONTRACTS).some((contracts) => !!contracts.merchantRegistry);
+}
+
+export function hasQieInvoiceRegistry() {
+  return Object.values(QIE_CONTRACTS).some((contracts) => !!contracts.invoiceRegistry);
+}
+
+export function getQieInvoiceRegistryTarget(chainId: number | undefined) {
+  const current = chainId == null ? null : QIE_CONTRACTS[chainId];
+  if (current?.invoiceRegistry) {
+    return { chainId: chainId!, address: current.invoiceRegistry };
+  }
+
+  for (const [configuredChainId, contracts] of Object.entries(QIE_CONTRACTS)) {
+    if (contracts.invoiceRegistry) {
+      return { chainId: Number(configuredChainId), address: contracts.invoiceRegistry };
+    }
+  }
+
+  return null;
 }
 
 /** Minimal ERC-20 ABI for read-only QIE Stable balance display. */

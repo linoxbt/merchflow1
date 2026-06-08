@@ -1,4 +1,4 @@
-// Shared types and formatters. Real data flows through Supabase server fns.
+// Shared types and formatters. Data can come from QIE contracts or Supabase fallbacks.
 
 export type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
 
@@ -15,6 +15,8 @@ export type InvoiceRow = {
   tx_hash: string | null;
   paid_at: string | null;
   created_at: string;
+  metadata_hash?: `0x${string}`;
+  source?: "supabase" | "onchain";
 };
 
 export type PayrollRecipientRow = {

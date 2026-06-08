@@ -1,14 +1,29 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowRight, CheckCircle2, ExternalLink, Loader2, Wallet } from "lucide-react";
-import { useAccount, useChainId, useConfig, useSendTransaction } from "wagmi";
+import {
+  useAccount,
+  useChainId,
+  useConfig,
+  useReadContract,
+  useSendTransaction,
+  useWriteContract,
+} from "wagmi";
 import { parseEther } from "viem";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { formatQie, num, type InvoiceRow } from "@/lib/types";
 import { qieMainnet, qieTestnet } from "@/lib/chains";
+import { getQieContracts, hasQieInvoiceRegistry } from "@/lib/qie-contracts";
 import { getInvoiceByNumber, markInvoicePaid } from "@/lib/invoices.functions";
+import {
+  INVOICE_REGISTRY_ABI,
+  amountQieToWei,
+  contractInvoiceToRow,
+  invoiceIdFromNumber,
+  type InvoiceRegistryRow,
+} from "@/lib/invoice-registry";
 import { trackTx } from "@/lib/tx-toast";
 import { toast } from "sonner";
 import { QieWalletButton } from "@/components/qie-wallet-button";
@@ -30,20 +45,53 @@ export function PayPage({ invoiceId }: { invoiceId: string }) {
   const chainId = useChainId();
   const config = useConfig();
   const { sendTransactionAsync, isPending: sending } = useSendTransaction();
+  const { writeContractAsync, isPending: writing } = useWriteContract();
+  const { invoiceRegistry } = getQieContracts(chainId);
+  const onchainRegistryConfigured = hasQieInvoiceRegistry();
+  const usingOnchain = Boolean(invoiceRegistry);
+  const wrongNetwork = Boolean(onchainRegistryConfigured && !invoiceRegistry);
   const [txHash, setTxHash] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["invoice", invoiceId],
+    enabled: !onchainRegistryConfigured,
     queryFn: () => getInv({ data: { number: invoiceId } }),
     refetchInterval: 5000,
   });
-  const invoice = (data?.invoice ?? null) as InvoiceRow | null;
+  const contractInvoice = useReadContract({
+    address: invoiceRegistry ?? undefined,
+    abi: INVOICE_REGISTRY_ABI,
+    functionName: "getInvoice",
+    args: invoiceRegistry ? [invoiceIdFromNumber(invoiceId)] : undefined,
+    query: {
+      enabled: usingOnchain,
+      refetchInterval: 5000,
+    },
+  });
+  const invoice = usingOnchain
+    ? contractInvoiceToRow(contractInvoice.data as InvoiceRegistryRow | undefined)
+    : ((data?.invoice ?? null) as InvoiceRow | null);
 
   useEffect(() => {
     if (invoice?.tx_hash && !txHash) setTxHash(invoice.tx_hash);
   }, [invoice?.tx_hash, txHash]);
 
-  if (isLoading) {
+  if (wrongNetwork) {
+    return (
+      <div className="mx-auto max-w-md px-6 py-20 text-center">
+        <h1 className="font-mono text-2xl font-bold">Switch QIE network</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This invoice is stored on-chain, but the invoice registry is not configured on the
+          currently selected network.
+        </p>
+        <div className="mt-6 flex justify-center">
+          <QieWalletButton />
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading || contractInvoice.isLoading) {
     return (
       <div className="mx-auto max-w-md px-6 py-20 text-center text-sm text-muted-foreground">
         Loading invoice…
@@ -71,6 +119,7 @@ export function PayPage({ invoiceId }: { invoiceId: string }) {
     chainId === qieMainnet.id
       ? qieMainnet.blockExplorers.default.url
       : qieTestnet.blockExplorers.default.url;
+  const displayedTxHash = invoice.tx_hash ?? txHash;
 
   async function pay() {
     if (!invoice || !address) return;
@@ -79,6 +128,21 @@ export function PayPage({ invoiceId }: { invoiceId: string }) {
       return;
     }
     try {
+      if (usingOnchain && invoiceRegistry) {
+        const hash = await writeContractAsync({
+          address: invoiceRegistry,
+          abi: INVOICE_REGISTRY_ABI,
+          functionName: "payInvoice",
+          args: [invoiceIdFromNumber(invoice.number)],
+          value: amountQieToWei(num(invoice.amount_qie)),
+        });
+        setTxHash(hash);
+
+        const receipt = await trackTx(config, hash, { chainId, label: "Payment" });
+        if (receipt?.status === "success") await contractInvoice.refetch();
+        return;
+      }
+
       const hash = await sendTransactionAsync({
         to: invoice.merchant_wallet as `0x${string}`,
         value: parseEther(num(invoice.amount_qie).toFixed(6)),
@@ -128,14 +192,14 @@ export function PayPage({ invoiceId }: { invoiceId: string }) {
               <div className="flex items-center gap-2 font-mono text-sm font-semibold">
                 <CheckCircle2 className="h-4 w-4" /> Paid
               </div>
-              {invoice.tx_hash && (
+              {displayedTxHash && (
                 <a
-                  href={`${explorer}/tx/${invoice.tx_hash}`}
+                  href={`${explorer}/tx/${displayedTxHash}`}
                   target="_blank"
                   rel="noreferrer"
                   className="mt-2 inline-flex items-center gap-1 text-xs font-mono break-all hover:underline"
                 >
-                  {invoice.tx_hash} <ExternalLink className="h-3 w-3 shrink-0" />
+                  {displayedTxHash} <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               )}
             </div>
@@ -155,11 +219,11 @@ export function PayPage({ invoiceId }: { invoiceId: string }) {
               </div>
               <Button
                 onClick={pay}
-                disabled={sending}
+                disabled={sending || writing}
                 className="w-full bg-primary hover:bg-primary/90"
                 size="lg"
               >
-                {sending ? (
+                {sending || writing ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Confirm in wallet…
                   </>

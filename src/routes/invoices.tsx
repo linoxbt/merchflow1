@@ -11,8 +11,9 @@ import {
   Camera,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useChainId, useConfig, useWriteContract } from "wagmi";
 import { RequireWallet } from "@/components/guards";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,9 +31,22 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatQie, num, type InvoiceRow, type InvoiceStatus } from "@/lib/types";
 import { useWallet, truncateAddress } from "@/lib/wallet";
-import { QIE_ACCOUNTING_RATE } from "@/lib/qie-contracts";
-import { createInvoice, listInvoicesByMerchant } from "@/lib/invoices.functions";
+import { getQieContracts, hasQieInvoiceRegistry, QIE_ACCOUNTING_RATE } from "@/lib/qie-contracts";
+import { createInvoice } from "@/lib/invoices.functions";
 import { getPaymentUrl, parsePaymentTarget } from "@/lib/payment-links";
+import { useMerchantInvoices } from "@/lib/use-invoices";
+import {
+  INVOICE_REGISTRY_ABI,
+  amountQieToWei,
+  amountUsdToCents,
+  buildPendingInvoiceRow,
+  createOnchainInvoiceNumber,
+  dueDateToUnix,
+  getInvoiceMetadataHash,
+  invoiceIdFromNumber,
+} from "@/lib/invoice-registry";
+import { qieMainnet, qieTestnet } from "@/lib/chains";
+import { trackTx } from "@/lib/tx-toast";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/invoices")({
@@ -48,16 +62,9 @@ const TABS = ["all", "paid", "pending", "overdue", "cancelled"] as const;
 
 function Invoices() {
   const { address } = useWallet();
-  const list = useServerFn(listInvoicesByMerchant);
   const qc = useQueryClient();
-  const queryKey = ["invoices", address?.toLowerCase()];
-
-  const { data, isLoading } = useQuery({
-    queryKey,
-    enabled: !!address,
-    queryFn: () => list({ data: { wallet: address! } }),
-  });
-  const invoices = useMemo(() => (data?.invoices ?? []) as InvoiceRow[], [data?.invoices]);
+  const { invoices, isLoading, queryKey, wrongNetwork, usingOnchain } =
+    useMerchantInvoices(address);
 
   const [tab, setTab] = useState<(typeof TABS)[number]>("all");
   const [q, setQ] = useState("");
@@ -99,6 +106,7 @@ function Invoices() {
           </h1>
           <div className="mt-2 text-[11px] font-mono text-muted-foreground">
             Demo accounting: 1 USD = {QIE_ACCOUNTING_RATE.toFixed(0)} QIE
+            {usingOnchain ? " · stored on-chain" : " · Supabase fallback"}
           </div>
         </div>
         <div className="flex gap-2">
@@ -143,7 +151,12 @@ function Invoices() {
       </div>
 
       <div className="rounded-lg border border-border bg-surface overflow-hidden">
-        {isLoading ? (
+        {wrongNetwork ? (
+          <div className="py-16 text-center text-sm text-muted-foreground">
+            Invoice registry is configured, but not on this network. Switch to QIE Testnet or
+            Mainnet.
+          </div>
+        ) : isLoading ? (
           <div className="py-16 text-center text-sm text-muted-foreground">Loading invoices…</div>
         ) : filtered.length === 0 ? (
           <EmptyState onCreate={() => setCreateOpen(true)} hasAny={invoices.length > 0} />
@@ -275,6 +288,11 @@ function CreateInvoiceDialog({
 }) {
   const { address } = useWallet();
   const create = useServerFn(createInvoice);
+  const chainId = useChainId();
+  const config = useConfig();
+  const { writeContractAsync } = useWriteContract();
+  const { invoiceRegistry } = getQieContracts(chainId);
+  const onchainRegistryConfigured = hasQieInvoiceRegistry();
 
   const [customer, setCustomer] = useState("");
   const [description, setDescription] = useState("");
@@ -321,11 +339,57 @@ function CreateInvoiceDialog({
     }
     setSubmitting(true);
     try {
+      const descriptionText = label ? `${label} - ${description}` : description;
+
+      if (onchainRegistryConfigured) {
+        if (!invoiceRegistry) {
+          toast.error("Invoice registry not configured on this network", {
+            description: `Switch to ${qieTestnet.name}${getQieContracts(qieMainnet.id).invoiceRegistry ? ` or ${qieMainnet.name}` : ""}.`,
+          });
+          return;
+        }
+
+        const number = createOnchainInvoiceNumber();
+        const payload = {
+          number,
+          merchantWallet: address,
+          customerWallet: customer,
+          description: descriptionText,
+          amountUsd: parseFloat(amountUsd),
+          amountQie,
+          dueDate,
+        };
+        const { metadataHash } = getInvoiceMetadataHash(payload);
+        const hash = await writeContractAsync({
+          address: invoiceRegistry,
+          abi: INVOICE_REGISTRY_ABI,
+          functionName: "createInvoice",
+          args: [
+            invoiceIdFromNumber(number),
+            number,
+            customer as `0x${string}`,
+            amountQieToWei(amountQie),
+            amountUsdToCents(parseFloat(amountUsd)),
+            dueDateToUnix(dueDate),
+            metadataHash,
+            descriptionText,
+          ],
+        });
+        const receipt = await trackTx(config, hash, { chainId, label: "Invoice creation" });
+        if (receipt?.status !== "success") return;
+
+        const row = buildPendingInvoiceRow(payload);
+        onCreated(row);
+        setCreated(row);
+        toast.success("Invoice created on-chain");
+        return;
+      }
+
       const { invoice } = await create({
         data: {
           merchantWallet: address,
           customerWallet: customer,
-          description: label ? `${label} — ${description}` : description,
+          description: descriptionText,
           amountUsd: parseFloat(amountUsd),
           amountQie,
           dueDate,

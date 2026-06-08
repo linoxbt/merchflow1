@@ -14,18 +14,11 @@ import { RequireWallet } from "@/components/guards";
 import { useWallet, truncateAddress } from "@/lib/wallet";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import {
-  formatQie,
-  num,
-  creditTier,
-  type InvoiceRow,
-  type PayrollRunRow,
-  type InvoiceStatus,
-} from "@/lib/types";
-import { listInvoicesByMerchant } from "@/lib/invoices.functions";
+import { formatQie, num, creditTier, type PayrollRunRow, type InvoiceStatus } from "@/lib/types";
 import { listPayrollByMerchant } from "@/lib/payroll.functions";
 import { getCreditProfile } from "@/lib/credit.functions";
 import { useQieStableBalance } from "@/lib/qie-hooks";
+import { useMerchantInvoices } from "@/lib/use-invoices";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — MerchFlow" }] }),
@@ -39,15 +32,10 @@ export const Route = createFileRoute("/dashboard")({
 function Dashboard() {
   const { merchant, address } = useWallet();
   const stable = useQieStableBalance(address as `0x${string}` | undefined);
-  const listInv = useServerFn(listInvoicesByMerchant);
   const listPay = useServerFn(listPayrollByMerchant);
   const credit = useServerFn(getCreditProfile);
+  const { invoices } = useMerchantInvoices(address);
 
-  const invQuery = useQuery({
-    queryKey: ["invoices", address?.toLowerCase()],
-    enabled: !!address,
-    queryFn: () => listInv({ data: { wallet: address! } }),
-  });
   const payQuery = useQuery({
     queryKey: ["payroll", address?.toLowerCase()],
     enabled: !!address,
@@ -59,7 +47,6 @@ function Dashboard() {
     queryFn: () => credit({ data: { wallet: address! } }),
   });
 
-  const invoices = (invQuery.data?.invoices ?? []) as InvoiceRow[];
   const recent = invoices.slice(0, 5);
   const pending = invoices.filter((i) => i.status === "pending" || i.status === "overdue");
   const pendingTotal = pending.reduce((s, i) => s + num(i.amount_qie), 0);
