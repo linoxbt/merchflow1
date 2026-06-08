@@ -1,15 +1,19 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { ArrowRight, Receipt, Users, TrendingUp, Zap } from "lucide-react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useWallet } from "@/lib/wallet";
 import { Button } from "@/components/ui/button";
+import { QieWalletButton } from "@/components/qie-wallet-button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "MerchFlow — Accept, pay, and borrow on QIE" },
-      { name: "description", content: "The merchant operating system for QIE. Accept payments, run payroll, and unlock working-capital credit from your on-chain revenue." },
+      {
+        name: "description",
+        content:
+          "The merchant operating system for QIE. Accept payments, run payroll, and unlock working-capital credit from your on-chain revenue.",
+      },
       { property: "og:title", content: "MerchFlow" },
       { property: "og:description", content: "Invoices, payroll, and credit — built on QIE." },
     ],
@@ -53,7 +57,6 @@ function Landing() {
             Powered by QIE — Testnet & Mainnet live
           </div>
 
-
           <h1 className="font-mono font-bold text-4xl sm:text-6xl leading-[1.05] tracking-tight max-w-3xl">
             Accept payments.
             <br />
@@ -69,31 +72,17 @@ function Landing() {
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <ConnectButton.Custom>
-              {({ openConnectModal, account, mounted }) => {
-                const ready = mounted;
-                if (ready && account) {
-                  return (
-                    <Button
-                      size="lg"
-                      onClick={() => navigate({ to: "/dashboard" })}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                    >
-                      Open Dashboard <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  );
-                }
-                return (
-                  <Button
-                    size="lg"
-                    onClick={openConnectModal}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                  >
-                    Connect Wallet <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                );
-              }}
-            </ConnectButton.Custom>
+            {connected ? (
+              <Button
+                size="lg"
+                onClick={() => navigate({ to: "/dashboard" })}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                Open Dashboard <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            ) : (
+              <QieWalletButton size="lg" />
+            )}
             <a href="#features">
               <Button
                 size="lg"
@@ -104,7 +93,6 @@ function Landing() {
               </Button>
             </a>
           </div>
-
         </div>
 
         {/* STATS */}
@@ -137,7 +125,7 @@ function Landing() {
             {
               icon: Users,
               title: "Pay Everyone at Once.",
-              body: "Send payroll to your entire team in one transaction. Staff without wallets get claim codes. Salary in QIE Stable, converted from any currency.",
+              body: "Record payroll for your team, generate claim codes for staff without wallets, and keep the QIE settlement story explicit.",
             },
             {
               icon: TrendingUp,
@@ -166,7 +154,7 @@ function Landing() {
             Fully integrated with the QIE ecosystem
           </div>
           <div className="flex flex-wrap gap-2 justify-center">
-            {["QIE Wallet", "QIE Stable", "QIE Pass", "QIE Oracle", "QIE DEX"].map((b) => (
+            {["QIE Wallet", "QIE native payments", "QIE Stable balance reference"].map((b) => (
               <span
                 key={b}
                 className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-mono text-primary"
@@ -182,12 +170,20 @@ function Landing() {
       {/* FOOTER */}
       <footer className="mx-auto max-w-7xl px-6 py-10 flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
-          <Link to="/" className="font-mono font-bold text-primary">MerchFlow</Link>
+          <Link to="/" className="font-mono font-bold text-primary">
+            MerchFlow
+          </Link>
         </div>
         <div className="flex items-center gap-4">
-          <Link to="/explore" className="hover:text-foreground">Explore</Link>
-          <a href="#" className="hover:text-foreground">GitHub</a>
-          <a href="#" className="hover:text-foreground">Docs</a>
+          <Link to="/explore" className="hover:text-foreground">
+            Explore
+          </Link>
+          <a href="#" className="hover:text-foreground">
+            GitHub
+          </a>
+          <a href="#" className="hover:text-foreground">
+            Docs
+          </a>
           <span>© 2026 linoxbt</span>
         </div>
       </footer>

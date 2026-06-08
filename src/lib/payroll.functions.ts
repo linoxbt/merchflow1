@@ -19,9 +19,7 @@ function randomClaimCode() {
 }
 
 export const listPayrollByMerchant = createServerFn({ method: "POST" })
-  .inputValidator((input: { wallet: string }) =>
-    z.object({ wallet: walletSchema }).parse(input),
-  )
+  .inputValidator((input: { wallet: string }) => z.object({ wallet: walletSchema }).parse(input))
   .handler(async ({ data }) => {
     const { data: runs, error } = await supabaseAdmin
       .from("payroll_runs")
@@ -33,22 +31,23 @@ export const listPayrollByMerchant = createServerFn({ method: "POST" })
   });
 
 export const createPayrollRun = createServerFn({ method: "POST" })
-  .inputValidator((input: {
-    merchantWallet: string;
-    recipients: z.infer<typeof recipientSchema>[];
-    txHash?: string | null;
-  }) =>
-    z
-      .object({
-        merchantWallet: walletSchema,
-        recipients: z.array(recipientSchema).min(1).max(500),
-        txHash: z
-          .string()
-          .regex(/^0x[a-fA-F0-9]{2,}$/)
-          .nullable()
-          .optional(),
-      })
-      .parse(input),
+  .inputValidator(
+    (input: {
+      merchantWallet: string;
+      recipients: z.infer<typeof recipientSchema>[];
+      txHash?: string | null;
+    }) =>
+      z
+        .object({
+          merchantWallet: walletSchema,
+          recipients: z.array(recipientSchema).min(1).max(500),
+          txHash: z
+            .string()
+            .regex(/^0x[a-fA-F0-9]{2,}$/)
+            .nullable()
+            .optional(),
+        })
+        .parse(input),
   )
   .handler(async ({ data }) => {
     const totalUsd = data.recipients.reduce((s, r) => s + r.amountUsd, 0);

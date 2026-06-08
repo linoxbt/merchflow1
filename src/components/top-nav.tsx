@@ -1,10 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { LayoutGrid, Menu, X } from "lucide-react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useWallet } from "@/lib/wallet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
+import { QieWalletButton } from "@/components/qie-wallet-button";
 
 const NAV_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
@@ -62,11 +62,7 @@ export function TopNav({ transparent = false }: { transparent?: boolean }) {
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <ConnectButton
-            accountStatus={{ smallScreen: "avatar", largeScreen: "address" }}
-            chainStatus={{ smallScreen: "icon", largeScreen: "full" }}
-            showBalance={false}
-          />
+          <QieWalletButton size="sm" />
           {connected && (
             <button
               className="md:hidden p-2 rounded-md hover:bg-surface-2"
@@ -91,7 +87,9 @@ export function TopNav({ transparent = false }: { transparent?: boolean }) {
                   onClick={() => setMobileOpen(false)}
                   className={cn(
                     "px-3 py-2 rounded-md text-sm font-medium",
-                    active ? "text-primary bg-primary/10" : "text-muted-foreground hover:bg-surface-2",
+                    active
+                      ? "text-primary bg-primary/10"
+                      : "text-muted-foreground hover:bg-surface-2",
                   )}
                 >
                   {l.label}

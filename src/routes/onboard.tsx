@@ -1,35 +1,43 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ShieldCheck, Check, ExternalLink, Loader2 } from "lucide-react";
-import { useWallet, truncateAddress } from "@/lib/wallet";
+import { Check, Store } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "sonner";
-import { useServerFn } from "@tanstack/react-start";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { registerMerchant } from "@/lib/merchants.functions";
-import { useQiePass } from "@/lib/qie-hooks";
-import { useAccount } from "wagmi";
+import { truncateAddress, useWallet } from "@/lib/wallet";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/onboard")({
-  head: () => ({ meta: [{ title: "Onboard — MerchFlow" }] }),
+  head: () => ({ meta: [{ title: "Onboard - MerchFlow" }] }),
   component: Onboard,
 });
 
 const CATEGORIES = [
-  "Retail", "Food & Beverage", "Services", "Technology",
-  "Creative", "Agriculture", "Healthcare", "Other",
+  "Retail",
+  "Food & Beverage",
+  "Services",
+  "Technology",
+  "Creative",
+  "Agriculture",
+  "Healthcare",
+  "Other",
 ];
 
 function Onboard() {
-  const { address, connected, qiePassVerified, setPassVerified, merchant, setMerchant } = useWallet();
+  const { address, connected, merchant, setMerchant } = useWallet();
   const navigate = useNavigate();
   const registerFn = useServerFn(registerMerchant);
-  const { address: wagmiAddress } = useAccount();
-  const pass = useQiePass(wagmiAddress);
-  const [step, setStep] = useState(qiePassVerified ? 2 : 1);
+  const [step, setStep] = useState<1 | 2>(1);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     businessName: "",
@@ -43,32 +51,12 @@ function Onboard() {
     else if (merchant) navigate({ to: "/dashboard" });
   }, [connected, merchant, navigate]);
 
-  const checkPass = async () => {
-    if (!pass.configured) {
-      // QIE Pass contract not configured yet — allow proceeding so the app is usable.
-      setPassVerified(true);
-      toast.message("QIE Pass contract not configured", {
-        description: "Skipping on-chain check. Set VITE_QIE_PASS_TESTNET to enforce.",
-      });
-      setStep(2);
-      return;
-    }
-    const { data } = await pass.refetch();
-    if ((data ?? 0n) > 0n) {
-      setPassVerified(true);
-      toast.success("QIE Pass verified on-chain");
-      setStep(2);
-    } else {
-      toast.error("No QIE Pass found in this wallet");
-    }
-  };
-
   const submit = async () => {
     if (!form.businessName.trim()) {
       toast.error("Business name is required");
       return;
     }
-    setStep(3);
+    setStep(2);
   };
 
   const register = async () => {
@@ -82,7 +70,6 @@ function Onboard() {
           category: form.category,
           description: form.description.trim(),
           website: form.website.trim(),
-          qiePassVerified: true,
         },
       });
       setMerchant({
@@ -93,7 +80,7 @@ function Onboard() {
         website: row.website ?? "",
         registeredAt: row.onboarded_at ? new Date(row.onboarded_at).getTime() : Date.now(),
       });
-      toast.success("Business registered on QIE", { description: "Welcome to MerchFlow." });
+      toast.success("Business registered", { description: "Welcome to MerchFlow." });
       navigate({ to: "/dashboard" });
     } catch (err) {
       console.error(err);
@@ -110,93 +97,103 @@ function Onboard() {
       <Stepper step={step} />
 
       {step === 1 && (
-        <div className="mt-10 rounded-lg border border-border bg-surface p-8 text-center">
-          <div className="mx-auto h-16 w-16 rounded-full bg-primary/15 border border-primary/30 grid place-items-center text-primary mb-5">
-            <ShieldCheck className="h-7 w-7" />
+        <div className="mt-10 rounded-lg border border-border bg-surface p-8">
+          <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full border border-primary/30 bg-primary/15 text-primary">
+            <Store className="h-6 w-6" />
           </div>
-          <h1 className="font-mono font-bold text-2xl">Verify with QIE Pass</h1>
-          <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
-            MerchFlow requires a verified QIE Pass to register as a merchant. This ensures only real businesses can create invoices and access credit.
+          <h1 className="text-center font-mono text-2xl font-bold">Tell us about your business</h1>
+          <p className="mx-auto mt-2 max-w-md text-center text-sm text-muted-foreground">
+            This profile is saved to MerchFlow and used for invoices, payroll, and credit scoring.
           </p>
-          {qiePassVerified || pass.verified ? (
-            <div className="mt-6 inline-flex items-center gap-2 text-success text-sm font-mono">
-              <Check className="h-4 w-4" /> QIE Pass verified
+          <div className="mt-6 grid gap-4">
+            <div>
+              <Label htmlFor="bn">Business Name</Label>
+              <Input
+                id="bn"
+                value={form.businessName}
+                onChange={(e) => setForm({ ...form, businessName: e.target.value })}
+                placeholder="Lagos Tech Studio"
+                className="mt-1.5"
+              />
             </div>
-          ) : (
-            <Button onClick={checkPass} disabled={pass.isLoading} className="mt-6 bg-primary hover:bg-primary/90">
-              {pass.isLoading ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Checking…</>) : "Check QIE Pass Status"}
-            </Button>
-          )}
-
-          <div className="mt-6 text-xs text-muted-foreground">
-            Don't have a QIE Pass?{" "}
-            <a className="text-primary inline-flex items-center gap-1" href="https://qie.digital/pass" target="_blank" rel="noreferrer">
-              Get one <ExternalLink className="h-3 w-3" />
-            </a>
+            <div>
+              <Label>Business Category</Label>
+              <Select
+                value={form.category}
+                onValueChange={(v) => setForm({ ...form, category: v })}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="desc">
+                Short Description{" "}
+                <span className="text-xs text-muted-foreground">(optional, max 160)</span>
+              </Label>
+              <Textarea
+                id="desc"
+                maxLength={160}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="What does your business do?"
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <Label htmlFor="web">
+                Website or Social Link{" "}
+                <span className="text-xs text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="web"
+                value={form.website}
+                onChange={(e) => setForm({ ...form, website: e.target.value })}
+                placeholder="https://..."
+                className="mt-1.5"
+              />
+            </div>
           </div>
-
-          {qiePassVerified && (
-            <div className="mt-6">
-              <Button onClick={() => setStep(2)} variant="ghost" className="border border-border">
-                Next Step
-              </Button>
-            </div>
-          )}
+          <div className="mt-6 flex justify-end">
+            <Button onClick={submit} className="bg-primary hover:bg-primary/90">
+              Continue
+            </Button>
+          </div>
         </div>
       )}
 
       {step === 2 && (
         <div className="mt-10 rounded-lg border border-border bg-surface p-8">
-          <h1 className="font-mono font-bold text-2xl">Tell us about your business</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This information is stored on-chain and visible to your customers.
-          </p>
-          <div className="mt-6 grid gap-4">
-            <div>
-              <Label htmlFor="bn">Business Name</Label>
-              <Input id="bn" value={form.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} placeholder="Lagos Tech Studio" className="mt-1.5" />
-            </div>
-            <div>
-              <Label>Business Category</Label>
-              <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
-                <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="desc">Short Description <span className="text-muted-foreground text-xs">(optional, max 160)</span></Label>
-              <Textarea id="desc" maxLength={160} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What does your business do?" className="mt-1.5" />
-            </div>
-            <div>
-              <Label htmlFor="web">Website or Social Link <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Input id="web" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://…" className="mt-1.5" />
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end">
-            <Button onClick={submit} className="bg-primary hover:bg-primary/90">Continue</Button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="mt-10 rounded-lg border border-border bg-surface p-8">
-          <h1 className="font-mono font-bold text-2xl">Almost there.</h1>
+          <h1 className="font-mono text-2xl font-bold">Confirm merchant profile</h1>
           <div className="mt-6 rounded-md border border-border bg-background p-5">
             <div className="text-xs font-mono uppercase text-muted-foreground">Business</div>
-            <div className="font-semibold text-lg mt-1">{form.businessName}</div>
+            <div className="mt-1 text-lg font-semibold">{form.businessName}</div>
             <div className="text-sm text-muted-foreground">{form.category}</div>
-            <div className="mt-4 text-xs font-mono text-muted-foreground">Wallet</div>
+            <div className="mt-4 text-xs font-mono uppercase text-muted-foreground">Wallet</div>
             <div className="font-mono text-sm">{truncateAddress(address, 8, 6)}</div>
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            Registering on MerchFlow will send one transaction to the QIE blockchain. This costs a small gas fee.
+            This action stores your merchant profile in MerchFlow. It does not submit an on-chain
+            identity claim.
           </p>
           <div className="mt-6 flex justify-between">
-            <Button variant="ghost" onClick={() => setStep(2)} className="border border-border">Back</Button>
-            <Button onClick={register} disabled={submitting} className="bg-primary hover:bg-primary/90">
-              {submitting ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirming on QIE blockchain…</>) : "Register My Business"}
+            <Button variant="ghost" onClick={() => setStep(1)} className="border border-border">
+              Back
+            </Button>
+            <Button
+              onClick={register}
+              disabled={submitting}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {submitting ? "Registering..." : "Register Business"}
             </Button>
           </div>
         </div>
@@ -206,20 +203,34 @@ function Onboard() {
 }
 
 function Stepper({ step }: { step: number }) {
-  const steps = ["Verify Identity", "Business Profile", "Confirm"];
+  const labels = ["Business", "Confirm"];
   return (
     <div className="flex items-center gap-2">
-      {steps.map((s, i) => {
+      {labels.map((label, i) => {
         const n = i + 1;
+        const active = n === step;
         const done = step > n;
-        const active = step === n;
         return (
-          <div key={s} className="flex-1 flex items-center gap-2">
-            <div className={`h-7 w-7 rounded-full grid place-items-center text-xs font-mono border ${done ? "bg-primary border-primary text-primary-foreground" : active ? "border-primary text-primary" : "border-border text-muted-foreground"}`}>
-              {done ? <Check className="h-3.5 w-3.5" /> : n}
+          <div key={label} className="flex flex-1 items-center gap-2">
+            <div
+              className={`grid h-7 w-7 place-items-center rounded-full border text-xs font-mono ${
+                done
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : active
+                    ? "border-primary text-primary"
+                    : "border-border text-muted-foreground"
+              }`}
+            >
+              {done ? <Check className="h-3 w-3" /> : n}
             </div>
-            <div className={`text-xs font-mono uppercase ${active ? "text-foreground" : "text-muted-foreground"}`}>{s}</div>
-            {i < steps.length - 1 && <div className="flex-1 h-px bg-border" />}
+            <span
+              className={`text-xs font-mono uppercase ${
+                active ? "text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              {label}
+            </span>
+            {i < labels.length - 1 && <div className="h-px flex-1 bg-border" />}
           </div>
         );
       })}

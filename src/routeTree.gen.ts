@@ -19,6 +19,7 @@ import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PayrollNewRouteImport } from './routes/payroll.new'
 import { Route as PayInvoiceIdRouteImport } from './routes/pay.$invoiceId'
+import { Route as PInvoiceIdRouteImport } from './routes/p.$invoiceId'
 
 const PayrollRoute = PayrollRouteImport.update({
   id: '/payroll',
@@ -70,6 +71,11 @@ const PayInvoiceIdRoute = PayInvoiceIdRouteImport.update({
   path: '/pay/$invoiceId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PInvoiceIdRoute = PInvoiceIdRouteImport.update({
+  id: '/p/$invoiceId',
+  path: '/p/$invoiceId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/invoices': typeof InvoicesRoute
   '/onboard': typeof OnboardRoute
   '/payroll': typeof PayrollRouteWithChildren
+  '/p/$invoiceId': typeof PInvoiceIdRoute
   '/pay/$invoiceId': typeof PayInvoiceIdRoute
   '/payroll/new': typeof PayrollNewRoute
 }
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/invoices': typeof InvoicesRoute
   '/onboard': typeof OnboardRoute
   '/payroll': typeof PayrollRouteWithChildren
+  '/p/$invoiceId': typeof PInvoiceIdRoute
   '/pay/$invoiceId': typeof PayInvoiceIdRoute
   '/payroll/new': typeof PayrollNewRoute
 }
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/invoices': typeof InvoicesRoute
   '/onboard': typeof OnboardRoute
   '/payroll': typeof PayrollRouteWithChildren
+  '/p/$invoiceId': typeof PInvoiceIdRoute
   '/pay/$invoiceId': typeof PayInvoiceIdRoute
   '/payroll/new': typeof PayrollNewRoute
 }
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/invoices'
     | '/onboard'
     | '/payroll'
+    | '/p/$invoiceId'
     | '/pay/$invoiceId'
     | '/payroll/new'
   fileRoutesByTo: FileRoutesByTo
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/invoices'
     | '/onboard'
     | '/payroll'
+    | '/p/$invoiceId'
     | '/pay/$invoiceId'
     | '/payroll/new'
   id:
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/invoices'
     | '/onboard'
     | '/payroll'
+    | '/p/$invoiceId'
     | '/pay/$invoiceId'
     | '/payroll/new'
   fileRoutesById: FileRoutesById
@@ -156,6 +168,7 @@ export interface RootRouteChildren {
   InvoicesRoute: typeof InvoicesRoute
   OnboardRoute: typeof OnboardRoute
   PayrollRoute: typeof PayrollRouteWithChildren
+  PInvoiceIdRoute: typeof PInvoiceIdRoute
   PayInvoiceIdRoute: typeof PayInvoiceIdRoute
 }
 
@@ -231,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PayInvoiceIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/p/$invoiceId': {
+      id: '/p/$invoiceId'
+      path: '/p/$invoiceId'
+      fullPath: '/p/$invoiceId'
+      preLoaderRoute: typeof PInvoiceIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -254,8 +274,19 @@ const rootRouteChildren: RootRouteChildren = {
   InvoicesRoute: InvoicesRoute,
   OnboardRoute: OnboardRoute,
   PayrollRoute: PayrollRouteWithChildren,
+  PInvoiceIdRoute: PInvoiceIdRoute,
   PayInvoiceIdRoute: PayInvoiceIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

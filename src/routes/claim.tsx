@@ -22,15 +22,23 @@ function Claim() {
   const [result, setResult] = useState<PayrollRecipientRow | null>(null);
 
   const submit = async () => {
-    if (!code.trim()) { toast.error("Enter your claim code"); return; }
-    if (!connected || !address) { toast.error("Connect your wallet first"); return; }
+    if (!code.trim()) {
+      toast.error("Enter your claim code");
+      return;
+    }
+    if (!connected || !address) {
+      toast.error("Connect your wallet first");
+      return;
+    }
     setLoading(true);
     try {
       const { recipient } = await redeem({ data: { code: code.trim(), wallet: address } });
       setResult(recipient as PayrollRecipientRow);
       toast.success("Claim successful");
     } catch (err) {
-      toast.error("Could not redeem", { description: err instanceof Error ? err.message : "Try again" });
+      toast.error("Could not redeem", {
+        description: err instanceof Error ? err.message : "Try again",
+      });
     } finally {
       setLoading(false);
     }
@@ -45,9 +53,14 @@ function Claim() {
               <Check className="h-5 w-5" />
             </div>
             <h1 className="font-mono font-bold text-xl">Redeemed!</h1>
-            <div className="mt-3 font-mono text-3xl text-primary">{formatQie(num(result.amount_qie))} QIE</div>
+            <div className="mt-3 font-mono text-3xl text-primary">
+              {formatQie(num(result.amount_qie))} QIE
+            </div>
             <div className="text-sm text-muted-foreground mt-1">Sent to your wallet</div>
-            <a href="#" className="mt-4 inline-flex items-center gap-1 text-xs font-mono text-primary hover:underline">
+            <a
+              href="#"
+              className="mt-4 inline-flex items-center gap-1 text-xs font-mono text-primary hover:underline"
+            >
               View on QIE Explorer <ExternalLink className="h-3 w-3" />
             </a>
           </div>
@@ -68,8 +81,19 @@ function Claim() {
                 Connect QIE Wallet to Receive
               </Button>
             ) : (
-              <Button onClick={submit} disabled={loading} className="mt-4 w-full bg-primary hover:bg-primary/90">
-                {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Redeeming…</> : "Redeem"}
+              <Button
+                onClick={submit}
+                disabled={loading}
+                className="mt-4 w-full bg-primary hover:bg-primary/90"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Redeeming…
+                  </>
+                ) : (
+                  "Redeem"
+                )}
               </Button>
             )}
           </>

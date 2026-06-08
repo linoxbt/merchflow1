@@ -8,17 +8,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { OracleRate } from "@/components/oracle-rate";
 import { formatQie, num, type PayrollRecipientRow, type PayrollRunRow } from "@/lib/types";
 import { useWallet } from "@/lib/wallet";
-import { useQieOracle, useQieStableBalance } from "@/lib/qie-hooks";
+import { useQieStableBalance } from "@/lib/qie-hooks";
+import { QIE_ACCOUNTING_RATE } from "@/lib/qie-contracts";
 import { createPayrollRun } from "@/lib/payroll.functions";
 import { parsePayrollCsv } from "@/lib/csv";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/payroll/new")({
   head: () => ({ meta: [{ title: "New Payroll — MerchFlow" }] }),
-  component: () => <RequireWallet><NewPayroll /></RequireWallet>,
+  component: () => (
+    <RequireWallet>
+      <NewPayroll />
+    </RequireWallet>
+  ),
 });
 
 type Row = {
@@ -29,11 +33,12 @@ type Row = {
   amountUsd: string;
 };
 
-function rid() { return Math.random().toString(36).slice(2, 9); }
+function rid() {
+  return Math.random().toString(36).slice(2, 9);
+}
 
 function NewPayroll() {
   const { address } = useWallet();
-  const { rate } = useQieOracle();
   const stable = useQieStableBalance(address as `0x${string}` | undefined);
   const create = useServerFn(createPayrollRun);
   const qc = useQueryClient();
@@ -49,13 +54,17 @@ function NewPayroll() {
   const [resultRecipients, setResultRecipients] = useState<PayrollRecipientRow[]>([]);
 
   const totalUsd = rows.reduce((s, r) => s + (parseFloat(r.amountUsd) || 0), 0);
-  const totalQie = totalUsd * rate;
+  const totalQie = totalUsd * QIE_ACCOUNTING_RATE;
 
   const updateRow = (id: string, patch: Partial<Row>) => {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   };
   const removeRow = (id: string) => setRows((rs) => rs.filter((r) => r.id !== id));
-  const addRow = () => setRows((rs) => [...rs, { id: rid(), noWallet: false, addressOrLabel: "", label: "", amountUsd: "" }]);
+  const addRow = () =>
+    setRows((rs) => [
+      ...rs,
+      { id: rid(), noWallet: false, addressOrLabel: "", label: "", amountUsd: "" },
+    ]);
 
   const onCsvFile = async (file: File) => {
     const text = await file.text();
@@ -84,9 +93,18 @@ function NewPayroll() {
   const goReview = () => {
     for (const r of rows) {
       const amt = parseFloat(r.amountUsd);
-      if (!amt || amt <= 0) { toast.error("All recipients need an amount"); return; }
-      if (r.noWallet && !r.addressOrLabel.trim()) { toast.error("Recipient name required for claim codes"); return; }
-      if (!r.noWallet && !/^0x[a-fA-F0-9]{40}$/.test(r.addressOrLabel)) { toast.error("Wallet must be 0x + 40 hex chars"); return; }
+      if (!amt || amt <= 0) {
+        toast.error("All recipients need an amount");
+        return;
+      }
+      if (r.noWallet && !r.addressOrLabel.trim()) {
+        toast.error("Recipient name required for claim codes");
+        return;
+      }
+      if (!r.noWallet && !/^0x[a-fA-F0-9]{40}$/.test(r.addressOrLabel)) {
+        toast.error("Wallet must be 0x + 40 hex chars");
+        return;
+      }
     }
     setStep(2);
   };
@@ -99,17 +117,16 @@ function NewPayroll() {
       const recipients = rows.map((r) => {
         const usd = parseFloat(r.amountUsd) || 0;
         return {
-          label: r.noWallet ? r.addressOrLabel : (r.label || r.addressOrLabel),
+          label: r.noWallet ? r.addressOrLabel : r.label || r.addressOrLabel,
           wallet: r.noWallet ? null : r.addressOrLabel,
           amountUsd: usd,
-          amountQie: +(usd * rate).toFixed(6),
+          amountQie: +(usd * QIE_ACCOUNTING_RATE).toFixed(6),
         };
       });
       const { run, recipients: out } = await create({
         data: {
           merchantWallet: address,
           recipients,
-          // Once QIE Stable is configured we'd attach the on-chain tx hash here.
           txHash: null,
         },
       });
@@ -118,7 +135,9 @@ function NewPayroll() {
       qc.invalidateQueries({ queryKey: ["payroll"] });
       setStep(4);
     } catch (err) {
-      toast.error("Payroll failed", { description: err instanceof Error ? err.message : "Try again" });
+      toast.error("Payroll failed", {
+        description: err instanceof Error ? err.message : "Try again",
+      });
       setStep(2);
     } finally {
       setProcessing(false);
@@ -132,7 +151,10 @@ function NewPayroll() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
-      <Link to="/payroll" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
+      <Link
+        to="/payroll"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
+      >
         <ArrowLeft className="h-4 w-4" /> Back to Payroll
       </Link>
 
@@ -143,7 +165,9 @@ function NewPayroll() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="font-mono font-bold text-2xl">Who are you paying?</h1>
-              <OracleRate className="mt-2" />
+              <div className="mt-2 text-[11px] font-mono text-muted-foreground">
+                Demo accounting: 1 USD = {QIE_ACCOUNTING_RATE.toFixed(0)} QIE
+              </div>
             </div>
             <div className="flex gap-2">
               <input
@@ -157,24 +181,31 @@ function NewPayroll() {
                   e.target.value = "";
                 }}
               />
-              <Button variant="ghost" className="border border-border" onClick={() => fileRef.current?.click()}>
+              <Button
+                variant="ghost"
+                className="border border-border"
+                onClick={() => fileRef.current?.click()}
+              >
                 <Upload className="h-4 w-4 mr-2" /> Import CSV
               </Button>
             </div>
           </div>
 
           <div className="text-[11px] text-muted-foreground font-mono">
-            CSV format: <code>label, wallet, amount_usd</code> (wallet optional — leave blank to generate claim code)
+            CSV format: <code>label, wallet, amount_usd</code> (wallet optional — leave blank to
+            generate claim code)
           </div>
 
           <div className="space-y-2">
             {rows.map((r) => {
-              const qie = (parseFloat(r.amountUsd) || 0) * rate;
+              const qie = (parseFloat(r.amountUsd) || 0) * QIE_ACCOUNTING_RATE;
               return (
                 <div key={r.id} className="rounded-lg border border-border bg-surface p-4">
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                     <div className="sm:col-span-6">
-                      <Label className="text-xs">{r.noWallet ? "Recipient Name/Label" : "Wallet Address"}</Label>
+                      <Label className="text-xs">
+                        {r.noWallet ? "Recipient Name/Label" : "Wallet Address"}
+                      </Label>
                       <Input
                         value={r.addressOrLabel}
                         onChange={(e) => updateRow(r.id, { addressOrLabel: e.target.value })}
@@ -199,7 +230,9 @@ function NewPayroll() {
                         placeholder="100"
                         className="mt-1 font-mono"
                       />
-                      <div className="text-[10px] font-mono text-primary mt-1">= {formatQie(qie)} QIE</div>
+                      <div className="text-[10px] font-mono text-primary mt-1">
+                        = {formatQie(qie)} QIE
+                      </div>
                     </div>
                     <div className="sm:col-span-3 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -208,7 +241,9 @@ function NewPayroll() {
                           onCheckedChange={(v) => updateRow(r.id, { noWallet: v })}
                           id={`nw-${r.id}`}
                         />
-                        <Label htmlFor={`nw-${r.id}`} className="text-xs">No wallet?</Label>
+                        <Label htmlFor={`nw-${r.id}`} className="text-xs">
+                          No wallet?
+                        </Label>
                       </div>
                       <button
                         onClick={() => removeRow(r.id)}
@@ -224,7 +259,11 @@ function NewPayroll() {
             })}
           </div>
 
-          <Button onClick={addRow} variant="ghost" className="border border-dashed border-border w-full">
+          <Button
+            onClick={addRow}
+            variant="ghost"
+            className="border border-dashed border-border w-full"
+          >
             <Plus className="h-4 w-4 mr-2" /> Add Recipient
           </Button>
 
@@ -233,13 +272,15 @@ function NewPayroll() {
               Total: <span className="text-foreground font-mono">{rows.length}</span> recipients
             </div>
             <div className="text-right">
-              <div className="font-mono text-lg">{formatQie(totalQie)} QIE Stable</div>
+              <div className="font-mono text-lg">{formatQie(totalQie)} QIE</div>
               <div className="text-[11px] text-muted-foreground">≈ ${formatQie(totalUsd)} USD</div>
             </div>
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={goReview} className="bg-primary hover:bg-primary/90">Review →</Button>
+            <Button onClick={goReview} className="bg-primary hover:bg-primary/90">
+              Review →
+            </Button>
           </div>
         </div>
       )}
@@ -264,7 +305,7 @@ function NewPayroll() {
                       {r.noWallet ? "Claim Code" : "Wallet Transfer"}
                     </td>
                     <td className="py-3 px-4 text-right font-mono">
-                      {formatQie((parseFloat(r.amountUsd) || 0) * rate)} QIE
+                      {formatQie((parseFloat(r.amountUsd) || 0) * QIE_ACCOUNTING_RATE)} QIE
                     </td>
                   </tr>
                 ))}
@@ -277,13 +318,19 @@ function NewPayroll() {
               <span className="font-mono text-2xl">{formatQie(totalQie)} QIE</span>
             </div>
             <div className="flex justify-between text-xs text-muted-foreground mt-1">
-              <span>≈ ${formatQie(totalUsd)} USD at current rate</span>
-              <span>QIE Stable Balance: {stable.configured ? formatQie(stable.balance ?? 0) : "—"} QIE</span>
+              <span>≈ ${formatQie(totalUsd)} USD using demo accounting</span>
+              <span>
+                QIE Stable Balance: {stable.configured ? formatQie(stable.balance ?? 0) : "—"} QIE
+              </span>
             </div>
           </div>
           <div className="flex justify-between">
-            <Button variant="ghost" onClick={() => setStep(1)} className="border border-border">Back</Button>
-            <Button onClick={runPayroll} className="bg-primary hover:bg-primary/90">Send Payroll</Button>
+            <Button variant="ghost" onClick={() => setStep(1)} className="border border-border">
+              Back
+            </Button>
+            <Button onClick={runPayroll} className="bg-primary hover:bg-primary/90">
+              Send Payroll
+            </Button>
           </div>
         </div>
       )}
@@ -301,16 +348,26 @@ function NewPayroll() {
             <div className="mx-auto h-10 w-10 rounded-full bg-success/20 grid place-items-center text-success mb-2">
               <Check className="h-5 w-5" />
             </div>
-            <div className="font-mono font-bold text-lg text-success">Payroll Run {resultRun.number} Complete</div>
-            <div className="text-sm text-muted-foreground mt-1">{formatQie(num(resultRun.total_qie))} QIE recorded for {resultRun.recipient_count} recipients.</div>
+            <div className="font-mono font-bold text-lg text-success">
+              Payroll Run {resultRun.number} Complete
+            </div>
+            <div className="text-sm text-muted-foreground mt-1">
+              {formatQie(num(resultRun.total_qie))} QIE recorded for {resultRun.recipient_count}{" "}
+              recipients.
+            </div>
           </div>
 
           {claimCodes.length > 0 && (
             <div className="rounded-lg border border-border bg-surface p-5">
-              <div className="text-xs font-mono uppercase text-muted-foreground mb-3">Claim Codes Generated</div>
+              <div className="text-xs font-mono uppercase text-muted-foreground mb-3">
+                Claim Codes Generated
+              </div>
               <div className="space-y-2">
                 {claimCodes.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2">
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2"
+                  >
                     <div>
                       <div className="text-sm">{c.label}</div>
                       <div className="font-mono text-warning text-sm">{c.claim_code}</div>
@@ -318,7 +375,10 @@ function NewPayroll() {
                     <div className="flex items-center gap-3">
                       <span className="font-mono text-sm">{formatQie(num(c.amount_qie))} QIE</span>
                       <button
-                        onClick={() => { navigator.clipboard.writeText(c.claim_code!); toast.success("Code copied"); }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(c.claim_code!);
+                          toast.success("Code copied");
+                        }}
                         className="p-1.5 text-muted-foreground hover:text-foreground"
                       >
                         <Copy className="h-4 w-4" />
@@ -331,7 +391,10 @@ function NewPayroll() {
           )}
 
           <div className="flex justify-end">
-            <Button onClick={() => navigate({ to: "/payroll" })} className="bg-primary hover:bg-primary/90">
+            <Button
+              onClick={() => navigate({ to: "/payroll" })}
+              className="bg-primary hover:bg-primary/90"
+            >
               View Payroll History
             </Button>
           </div>
@@ -351,10 +414,16 @@ function StepDots({ step }: { step: number }) {
         const done = step > n;
         return (
           <div key={l} className="flex-1 flex items-center gap-2">
-            <div className={`h-6 w-6 rounded-full grid place-items-center text-[10px] font-mono border ${done ? "bg-primary border-primary text-primary-foreground" : active ? "border-primary text-primary" : "border-border text-muted-foreground"}`}>
+            <div
+              className={`h-6 w-6 rounded-full grid place-items-center text-[10px] font-mono border ${done ? "bg-primary border-primary text-primary-foreground" : active ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+            >
               {done ? <Check className="h-3 w-3" /> : n}
             </div>
-            <div className={`text-[10px] font-mono uppercase ${active ? "text-foreground" : "text-muted-foreground"}`}>{l}</div>
+            <div
+              className={`text-[10px] font-mono uppercase ${active ? "text-foreground" : "text-muted-foreground"}`}
+            >
+              {l}
+            </div>
             {i < labels.length - 1 && <div className="flex-1 h-px bg-border" />}
           </div>
         );

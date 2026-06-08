@@ -14,7 +14,11 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/payroll")({
   head: () => ({ meta: [{ title: "Payroll — MerchFlow" }] }),
-  component: () => <RequireWallet><Payroll /></RequireWallet>,
+  component: () => (
+    <RequireWallet>
+      <Payroll />
+    </RequireWallet>
+  ),
 });
 
 function Payroll() {
@@ -53,7 +57,9 @@ function Payroll() {
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-mono uppercase tracking-wide border-b-2 -mb-px ${
-              tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              tab === t
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             {t === "history" ? "Payroll History" : "Claim Codes"}
@@ -64,9 +70,13 @@ function Payroll() {
       {tab === "history" && (
         <div className="rounded-lg border border-border bg-surface overflow-hidden">
           {isLoading ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">Loading payroll runs…</div>
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              Loading payroll runs…
+            </div>
           ) : runs.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">No payroll runs yet.</div>
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              No payroll runs yet.
+            </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
@@ -89,12 +99,24 @@ function Payroll() {
                         className="border-b border-border last:border-0 hover:bg-surface-2 cursor-pointer"
                         onClick={() => setExpanded(isOpen ? null : p.id)}
                       >
-                        <td className="py-3 pl-4">{isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</td>
+                        <td className="py-3 pl-4">
+                          {isOpen ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </td>
                         <td className="py-3 px-4 font-mono">{p.number}</td>
-                        <td className="py-3 px-4 text-muted-foreground">{p.created_at.slice(0, 10)}</td>
+                        <td className="py-3 px-4 text-muted-foreground">
+                          {p.created_at.slice(0, 10)}
+                        </td>
                         <td className="py-3 px-4 font-mono">{p.recipient_count}</td>
-                        <td className="py-3 px-4 text-right font-mono">{formatQie(num(p.total_qie))} QIE</td>
-                        <td className="py-3 px-4"><StatusBadge status={p.status} /></td>
+                        <td className="py-3 px-4 text-right font-mono">
+                          {formatQie(num(p.total_qie))} QIE
+                        </td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={p.status} />
+                        </td>
                         <td className="py-3 px-4">
                           {p.tx_hash ? (
                             <a
@@ -106,7 +128,9 @@ function Payroll() {
                             >
                               {p.tx_hash.slice(0, 8)}… <ExternalLink className="h-3 w-3" />
                             </a>
-                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </td>
                       </tr>
                       {isOpen && (
@@ -125,11 +149,17 @@ function Payroll() {
                                 {(p.payroll_recipients ?? []).map((r: PayrollRecipientRow) => (
                                   <tr key={r.id} className="border-t border-border/60">
                                     <td className="py-2 pr-3 font-mono">
-                                      {r.wallet ?? <span className="text-warning">{r.claim_code}</span>}
+                                      {r.wallet ?? (
+                                        <span className="text-warning">{r.claim_code}</span>
+                                      )}
                                     </td>
                                     <td className="py-2 pr-3 text-muted-foreground">{r.label}</td>
-                                    <td className="py-2 pr-3 text-right font-mono">{formatQie(num(r.amount_qie))} QIE</td>
-                                    <td className="py-2 pr-3"><StatusBadge status={r.status} /></td>
+                                    <td className="py-2 pr-3 text-right font-mono">
+                                      {formatQie(num(r.amount_qie))} QIE
+                                    </td>
+                                    <td className="py-2 pr-3">
+                                      <StatusBadge status={r.status} />
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -161,24 +191,37 @@ function Payroll() {
             </thead>
             <tbody>
               {claims.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-12 text-muted-foreground text-sm">No claim codes yet.</td></tr>
-              ) : claims.map((c) => (
-                <tr key={c.id} className="border-b border-border last:border-0">
-                  <td className="py-3 px-4 font-mono text-warning">{c.claim_code}</td>
-                  <td className="py-3 px-4 text-muted-foreground">{c.label}</td>
-                  <td className="py-3 px-4 text-right font-mono">{formatQie(num(c.amount_qie))} QIE</td>
-                  <td className="py-3 px-4 text-muted-foreground">{c.date.slice(0, 10)}</td>
-                  <td className="py-3 px-4"><StatusBadge status={c.status} /></td>
-                  <td className="py-3 px-4">
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(c.claim_code!); toast.success("Code copied"); }}
-                      className="p-1 text-muted-foreground hover:text-foreground"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </button>
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-muted-foreground text-sm">
+                    No claim codes yet.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                claims.map((c) => (
+                  <tr key={c.id} className="border-b border-border last:border-0">
+                    <td className="py-3 px-4 font-mono text-warning">{c.claim_code}</td>
+                    <td className="py-3 px-4 text-muted-foreground">{c.label}</td>
+                    <td className="py-3 px-4 text-right font-mono">
+                      {formatQie(num(c.amount_qie))} QIE
+                    </td>
+                    <td className="py-3 px-4 text-muted-foreground">{c.date.slice(0, 10)}</td>
+                    <td className="py-3 px-4">
+                      <StatusBadge status={c.status} />
+                    </td>
+                    <td className="py-3 px-4">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(c.claim_code!);
+                          toast.success("Code copied");
+                        }}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

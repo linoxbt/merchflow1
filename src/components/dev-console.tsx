@@ -85,7 +85,10 @@ export function DevConsole() {
   // Subscribe to navigation
   useEffect(() => {
     const unsub = router.subscribe("onResolved", (e) => {
-      push("nav", `→ ${e.toLocation.pathname}${e.toLocation.search ? "?" + new URLSearchParams(e.toLocation.search as Record<string, string>).toString() : ""}`);
+      push(
+        "nav",
+        `→ ${e.toLocation.pathname}${e.toLocation.search ? "?" + new URLSearchParams(e.toLocation.search as Record<string, string>).toString() : ""}`,
+      );
     });
     return unsub;
   }, [router]);
@@ -116,17 +119,20 @@ export function DevConsole() {
           <span className="font-semibold">Dev Console</span>
           <span className="text-muted-foreground">{logs.length} events</span>
           {errorCount > 0 && (
-            <span className="text-destructive">· {errorCount} error{errorCount > 1 ? "s" : ""}</span>
+            <span className="text-destructive">
+              · {errorCount} error{errorCount > 1 ? "s" : ""}
+            </span>
           )}
-          {warnCount > 0 && (
-            <span className="text-warning">· {warnCount} warn</span>
-          )}
+          {warnCount > 0 && <span className="text-warning">· {warnCount} warn</span>}
           <span className="ml-auto flex items-center gap-2">
             {open && (
               <span
                 role="button"
                 tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); setLogs([]); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLogs([]);
+                }}
                 className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
               >
                 <Trash2 className="h-3 w-3" /> Clear

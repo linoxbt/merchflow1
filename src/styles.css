@@ -57,15 +57,15 @@
 /* ---------- Light (default) — kimi.com style soft white ---------- */
 :root {
   --radius: 0.5rem;
-  --background: oklch(0.985 0.003 80);            /* #faf9f7 soft warm white */
-  --foreground: oklch(0.21 0.015 250);            /* near-black ink */
-  --surface: oklch(0.97 0.004 80);                /* card surface */
-  --surface-2: oklch(0.94 0.005 80);              /* hover / pill bg */
+  --background: oklch(0.985 0.003 80); /* #faf9f7 soft warm white */
+  --foreground: oklch(0.21 0.015 250); /* near-black ink */
+  --surface: oklch(0.97 0.004 80); /* card surface */
+  --surface-2: oklch(0.94 0.005 80); /* hover / pill bg */
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.015 250);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.015 250);
-  --primary: oklch(0.55 0.11 210);                /* QIE teal, darker for light */
+  --primary: oklch(0.55 0.11 210); /* QIE teal, darker for light */
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.94 0.005 80);
   --secondary-foreground: oklch(0.21 0.015 250);
@@ -154,14 +154,30 @@
 }
 
 @layer utilities {
-  .text-success { color: var(--color-success); }
-  .text-warning { color: var(--color-warning); }
-  .text-info { color: var(--color-info); }
-  .bg-success { background-color: var(--color-success); }
-  .bg-warning { background-color: var(--color-warning); }
-  .bg-surface { background-color: var(--color-surface); }
-  .bg-surface-2 { background-color: var(--color-surface-2); }
-  .border-surface-2 { border-color: var(--color-surface-2); }
+  .text-success {
+    color: var(--color-success);
+  }
+  .text-warning {
+    color: var(--color-warning);
+  }
+  .text-info {
+    color: var(--color-info);
+  }
+  .bg-success {
+    background-color: var(--color-success);
+  }
+  .bg-warning {
+    background-color: var(--color-warning);
+  }
+  .bg-surface {
+    background-color: var(--color-surface);
+  }
+  .bg-surface-2 {
+    background-color: var(--color-surface-2);
+  }
+  .border-surface-2 {
+    border-color: var(--color-surface-2);
+  }
   .gradient-credit {
     background: linear-gradient(90deg, #e53e3e 0%, #f6a623 45%, #27ae60 100%);
   }

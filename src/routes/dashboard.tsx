@@ -1,27 +1,44 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUpRight, MoreHorizontal, Receipt, Users, DollarSign, RefreshCw, Plus } from "lucide-react";
+import {
+  ArrowUpRight,
+  MoreHorizontal,
+  Receipt,
+  Users,
+  DollarSign,
+  RefreshCw,
+  Plus,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { RequireWallet } from "@/components/guards";
 import { useWallet, truncateAddress } from "@/lib/wallet";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { OracleRate } from "@/components/oracle-rate";
-import { formatQie, num, creditTier, type InvoiceRow, type PayrollRunRow, type InvoiceStatus } from "@/lib/types";
+import {
+  formatQie,
+  num,
+  creditTier,
+  type InvoiceRow,
+  type PayrollRunRow,
+  type InvoiceStatus,
+} from "@/lib/types";
 import { listInvoicesByMerchant } from "@/lib/invoices.functions";
 import { listPayrollByMerchant } from "@/lib/payroll.functions";
 import { getCreditProfile } from "@/lib/credit.functions";
-import { useQieOracle, useQieStableBalance } from "@/lib/qie-hooks";
+import { useQieStableBalance } from "@/lib/qie-hooks";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — MerchFlow" }] }),
-  component: () => <RequireWallet><Dashboard /></RequireWallet>,
+  component: () => (
+    <RequireWallet>
+      <Dashboard />
+    </RequireWallet>
+  ),
 });
 
 function Dashboard() {
   const { merchant, address } = useWallet();
   const stable = useQieStableBalance(address as `0x${string}` | undefined);
-  const oracle = useQieOracle();
   const listInv = useServerFn(listInvoicesByMerchant);
   const listPay = useServerFn(listPayrollByMerchant);
   const credit = useServerFn(getCreditProfile);
@@ -103,9 +120,14 @@ function Dashboard() {
           sub={
             <div className="space-y-1">
               <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
-                <div className="h-full gradient-credit" style={{ width: `${Math.min(100, (score / 800) * 100)}%` }} />
+                <div
+                  className="h-full gradient-credit"
+                  style={{ width: `${Math.min(100, (score / 800) * 100)}%` }}
+                />
               </div>
-              <div>{creditTier(score)} — eligible for up to {formatQie(maxLoan)} QIE</div>
+              <div>
+                {creditTier(score)} — eligible for up to {formatQie(maxLoan)} QIE
+              </div>
             </div>
           }
         />
@@ -120,7 +142,10 @@ function Dashboard() {
           }
           sub={
             activeLoan ? (
-              <Link to="/credit" className="text-primary inline-flex items-center gap-1 hover:underline">
+              <Link
+                to="/credit"
+                className="text-primary inline-flex items-center gap-1 hover:underline"
+              >
                 Next due {activeLoan.due_date} <ArrowUpRight className="h-3 w-3" />
               </Link>
             ) : (
@@ -134,10 +159,16 @@ function Dashboard() {
         <div className="lg:col-span-2 space-y-6">
           <SectionCard
             title="Recent Invoices"
-            action={<Link to="/invoices" className="text-xs text-primary hover:underline">View All →</Link>}
+            action={
+              <Link to="/invoices" className="text-xs text-primary hover:underline">
+                View All →
+              </Link>
+            }
           >
             {recent.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">No invoices yet. Create your first one.</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No invoices yet. Create your first one.
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -155,11 +186,21 @@ function Dashboard() {
                     {recent.map((inv) => (
                       <tr key={inv.id} className="border-b border-border last:border-0">
                         <td className="py-3 pr-3 font-mono">{inv.number}</td>
-                        <td className="py-3 pr-3 font-mono text-muted-foreground">{truncateAddress(inv.customer_wallet)}</td>
-                        <td className="py-3 pr-3 text-right font-mono">{formatQie(num(inv.amount_qie))} QIE</td>
-                        <td className="py-3 pr-3 text-muted-foreground">{inv.created_at.slice(0, 10)}</td>
-                        <td className="py-3 pr-3"><StatusBadge status={inv.status as InvoiceStatus} /></td>
-                        <td className="py-3"><MoreHorizontal className="h-4 w-4 text-muted-foreground" /></td>
+                        <td className="py-3 pr-3 font-mono text-muted-foreground">
+                          {truncateAddress(inv.customer_wallet)}
+                        </td>
+                        <td className="py-3 pr-3 text-right font-mono">
+                          {formatQie(num(inv.amount_qie))} QIE
+                        </td>
+                        <td className="py-3 pr-3 text-muted-foreground">
+                          {inv.created_at.slice(0, 10)}
+                        </td>
+                        <td className="py-3 pr-3">
+                          <StatusBadge status={inv.status as InvoiceStatus} />
+                        </td>
+                        <td className="py-3">
+                          <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -170,10 +211,16 @@ function Dashboard() {
 
           <SectionCard
             title="Payroll History"
-            action={<Link to="/payroll" className="text-xs text-primary hover:underline">View All →</Link>}
+            action={
+              <Link to="/payroll" className="text-xs text-primary hover:underline">
+                View All →
+              </Link>
+            }
           >
             {runs.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">No payroll runs yet.</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No payroll runs yet.
+              </div>
             ) : (
               <table className="w-full text-sm">
                 <thead>
@@ -189,10 +236,16 @@ function Dashboard() {
                   {runs.slice(0, 5).map((p) => (
                     <tr key={p.id} className="border-b border-border last:border-0">
                       <td className="py-3 pr-3 font-mono">{p.number}</td>
-                      <td className="py-3 pr-3 text-muted-foreground">{p.created_at.slice(0, 10)}</td>
+                      <td className="py-3 pr-3 text-muted-foreground">
+                        {p.created_at.slice(0, 10)}
+                      </td>
                       <td className="py-3 pr-3 font-mono">{p.recipient_count}</td>
-                      <td className="py-3 pr-3 text-right font-mono">{formatQie(num(p.total_qie))} QIE</td>
-                      <td className="py-3 pr-3"><StatusBadge status={p.status} /></td>
+                      <td className="py-3 pr-3 text-right font-mono">
+                        {formatQie(num(p.total_qie))} QIE
+                      </td>
+                      <td className="py-3 pr-3">
+                        <StatusBadge status={p.status} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -212,10 +265,15 @@ function Dashboard() {
                 <div key={s.name}>
                   <div className="flex justify-between text-xs font-mono mb-1">
                     <span className="text-muted-foreground">{s.name}</span>
-                    <span>{s.score}/{s.max}</span>
+                    <span>
+                      {s.score}/{s.max}
+                    </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
-                    <div className="h-full bg-primary" style={{ width: `${(s.score / s.max) * 100}%` }} />
+                    <div
+                      className="h-full bg-primary"
+                      style={{ width: `${(s.score / s.max) * 100}%` }}
+                    />
                   </div>
                 </div>
               ))}
@@ -230,16 +288,19 @@ function Dashboard() {
               <QuickBtn to="/invoices" icon={Receipt} label="New Invoice" />
               <QuickBtn to="/payroll/new" icon={Users} label="Run Payroll" />
               <QuickBtn to="/credit" icon={DollarSign} label="Borrow Capital" />
-              <QuickBtn to="/dashboard" icon={RefreshCw} label="Swap to Stable" />
+              <QuickBtn to="/explore" icon={RefreshCw} label="Explore QIE" />
             </div>
           </SectionCard>
 
-          <SectionCard title="Current Rate">
-            <div className="font-mono text-xl">1 USD = {oracle.rate.toFixed(3)} QIE Stable</div>
-            <div className="text-[11px] text-muted-foreground mt-1">
-              {oracle.live ? "Live via QIE Oracle" : "Fallback rate — oracle not configured"}
+          <SectionCard title="Wallet Reference">
+            <div className="font-mono text-xl">
+              {stable.configured
+                ? `${formatQie(stable.balance ?? 0)} QIE Stable`
+                : "QIE Stable not configured"}
             </div>
-            <OracleRate className="mt-3" />
+            <div className="text-[11px] text-muted-foreground mt-1">
+              Read-only connected-wallet balance. It is not used to force settlement.
+            </div>
           </SectionCard>
         </div>
       </div>
@@ -247,21 +308,43 @@ function Dashboard() {
   );
 }
 
-function StatCard({ label, value, valueClass = "text-primary", sub }: { label: string; value: string; valueClass?: string; sub?: React.ReactNode }) {
+function StatCard({
+  label,
+  value,
+  valueClass = "text-primary",
+  sub,
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+  sub?: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-border bg-surface p-5">
-      <div className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
       <div className={`mt-2 font-mono text-2xl ${valueClass}`}>{value}</div>
       {sub && <div className="mt-2 text-xs text-muted-foreground">{sub}</div>}
     </div>
   );
 }
 
-function SectionCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+function SectionCard({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-border bg-surface p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-mono uppercase tracking-wider text-muted-foreground">{title}</h3>
+        <h3 className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+          {title}
+        </h3>
         {action}
       </div>
       {children}
@@ -269,7 +352,15 @@ function SectionCard({ title, action, children }: { title: string; action?: Reac
   );
 }
 
-function QuickBtn({ to, icon: Icon, label }: { to: string; icon: React.ComponentType<{ className?: string }>; label: string }) {
+function QuickBtn({
+  to,
+  icon: Icon,
+  label,
+}: {
+  to: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
   return (
     <Link
       to={to}

@@ -1,7 +1,18 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useAccount, useDisconnect } from "wagmi";
-import { useConnectModal } from "@rainbow-me/rainbowkit";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { getMerchantByWallet } from "@/lib/merchants.functions";
+import { qieTestnet } from "@/lib/chains";
+import { toast } from "sonner";
+
+export const QIE_WALLET_URL = "https://www.qiewallet.me/";
 
 export type MerchantProfile = {
   address: string;
@@ -15,18 +26,17 @@ export type MerchantProfile = {
 type WalletState = {
   address: string | null;
   connected: boolean;
+  connecting: boolean;
   merchant: MerchantProfile | null;
-  qiePassVerified: boolean;
   connect: () => void;
   disconnect: () => void;
   setMerchant: (m: MerchantProfile) => void;
-  setPassVerified: (v: boolean) => void;
 };
 
 const WalletCtx = createContext<WalletState | null>(null);
 const STORAGE_KEY = "merchflow:profile";
 
-type StoredByAddress = Record<string, { merchant?: MerchantProfile; qiePassVerified?: boolean }>;
+type StoredByAddress = Record<string, { merchant?: MerchantProfile }>;
 
 function readStore(): StoredByAddress {
   if (typeof window === "undefined") return {};
@@ -45,23 +55,20 @@ function writeStore(s: StoredByAddress) {
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { address: wagmiAddress, isConnected } = useAccount();
   const { disconnect: wagmiDisconnect } = useDisconnect();
-  const { openConnectModal } = useConnectModal();
+  const { connectAsync, connectors, isPending: connecting } = useConnect();
 
   const address = wagmiAddress ?? null;
   const [merchant, setMerchantState] = useState<MerchantProfile | null>(null);
-  const [qiePassVerified, setPassVerifiedState] = useState(false);
 
   // Load per-address profile when address changes
   useEffect(() => {
     if (!address) {
       setMerchantState(null);
-      setPassVerifiedState(false);
       return;
     }
     const store = readStore();
     const entry = store[address.toLowerCase()];
     setMerchantState(entry?.merchant ?? null);
-    setPassVerifiedState(!!entry?.qiePassVerified);
 
     // Hydrate from Supabase (source of truth)
     let cancelled = false;
@@ -74,16 +81,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           category: row.category ?? "",
           description: row.description ?? "",
           website: row.website ?? "",
-          registeredAt: row.onboarded_at
-            ? new Date(row.onboarded_at).getTime()
-            : Date.now(),
+          registeredAt: row.onboarded_at ? new Date(row.onboarded_at).getTime() : Date.now(),
         };
         setMerchantState(hydrated);
-        setPassVerifiedState(!!row.qie_pass_verified);
         const store2 = readStore();
         store2[address.toLowerCase()] = {
           merchant: hydrated,
-          qiePassVerified: !!row.qie_pass_verified,
         };
         writeStore(store2);
       })
@@ -94,14 +97,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [address]);
 
   const persist = useCallback(
-    (patch: { merchant?: MerchantProfile | null; qiePassVerified?: boolean }) => {
+    (patch: { merchant?: MerchantProfile | null }) => {
       if (!address) return;
       const key = address.toLowerCase();
       const store = readStore();
       const prev = store[key] ?? {};
       store[key] = {
-        merchant: patch.merchant === undefined ? prev.merchant : patch.merchant ?? undefined,
-        qiePassVerified: patch.qiePassVerified ?? prev.qiePassVerified,
+        merchant: patch.merchant === undefined ? prev.merchant : (patch.merchant ?? undefined),
       };
       writeStore(store);
     },
@@ -116,36 +118,51 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
-  const setPassVerified = useCallback(
-    (v: boolean) => {
-      setPassVerifiedState(v);
-      persist({ qiePassVerified: v });
-    },
-    [persist],
-  );
-
   const connect = useCallback(() => {
-    openConnectModal?.();
-  }, [openConnectModal]);
+    const injected = connectors.find((c) => c.type === "injected") ?? connectors[0];
+    const hasInjectedProvider =
+      typeof window !== "undefined" &&
+      Boolean((window as Window & { ethereum?: unknown }).ethereum);
+
+    if (!hasInjectedProvider) {
+      toast.error("QIE Wallet not detected", {
+        description: "Install or open QIE Wallet, then try again.",
+        action: {
+          label: "Get QIE Wallet",
+          onClick: () => window.open(QIE_WALLET_URL, "_blank", "noreferrer"),
+        },
+      });
+      return;
+    }
+
+    if (!injected) {
+      toast.error("No injected wallet connector found");
+      return;
+    }
+
+    connectAsync({ connector: injected, chainId: qieTestnet.id }).catch((err) => {
+      toast.error("Could not connect QIE Wallet", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    });
+  }, [connectAsync, connectors]);
 
   const disconnect = useCallback(() => {
     wagmiDisconnect();
     setMerchantState(null);
-    setPassVerifiedState(false);
   }, [wagmiDisconnect]);
 
   const value = useMemo<WalletState>(
     () => ({
       address,
       connected: isConnected && !!address,
+      connecting,
       merchant,
-      qiePassVerified,
       connect,
       disconnect,
       setMerchant,
-      setPassVerified,
     }),
-    [address, isConnected, merchant, qiePassVerified, connect, disconnect, setMerchant, setPassVerified],
+    [address, isConnected, connecting, merchant, connect, disconnect, setMerchant],
   );
 
   return <WalletCtx.Provider value={value}>{children}</WalletCtx.Provider>;

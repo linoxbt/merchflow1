@@ -12,9 +12,7 @@ const walletSchema = z
  * Returns the breakdown so the UI can render bars.
  */
 export const getCreditProfile = createServerFn({ method: "POST" })
-  .inputValidator((input: { wallet: string }) =>
-    z.object({ wallet: walletSchema }).parse(input),
-  )
+  .inputValidator((input: { wallet: string }) => z.object({ wallet: walletSchema }).parse(input))
   .handler(async ({ data }) => {
     const [invoicesQ, payrollQ, merchantQ, loansQ] = await Promise.all([
       supabaseAdmin.from("invoices").select("*").eq("merchant_wallet", data.wallet),
@@ -34,15 +32,25 @@ export const getCreditProfile = createServerFn({ method: "POST" })
     const accountAgeDays = merchant?.onboarded_at
       ? Math.max(0, (Date.now() - new Date(merchant.onboarded_at).getTime()) / 86_400_000)
       : 0;
-    const onTimeRate = invoices.length
-      ? paidInvoices.length / invoices.length
-      : 0;
+    const onTimeRate = invoices.length ? paidInvoices.length / invoices.length : 0;
 
     const signals = [
-      { name: "Invoice Volume", score: Math.min(300, Math.round(paidInvoices.length * 20)), max: 300 },
+      {
+        name: "Invoice Volume",
+        score: Math.min(300, Math.round(paidInvoices.length * 20)),
+        max: 300,
+      },
       { name: "Payment Regularity", score: Math.round(onTimeRate * 200), max: 200 },
-      { name: "Payroll Consistency", score: Math.min(200, Math.round(payroll.length * 25)), max: 200 },
-      { name: "Unique Customers", score: Math.min(200, Math.round(uniqueCustomers * 25)), max: 200 },
+      {
+        name: "Payroll Consistency",
+        score: Math.min(200, Math.round(payroll.length * 25)),
+        max: 200,
+      },
+      {
+        name: "Unique Customers",
+        score: Math.min(200, Math.round(uniqueCustomers * 25)),
+        max: 200,
+      },
       { name: "Account Age", score: Math.min(100, Math.round(accountAgeDays / 3)), max: 100 },
     ];
     const score = signals.reduce((s, x) => s + x.score, 0);
@@ -69,7 +77,11 @@ export const requestLoan = createServerFn({ method: "POST" })
       .object({
         wallet: walletSchema,
         principalQie: z.number().positive().finite(),
-        txHash: z.string().regex(/^0x[a-fA-F0-9]{2,}$/).nullable().optional(),
+        txHash: z
+          .string()
+          .regex(/^0x[a-fA-F0-9]{2,}$/)
+          .nullable()
+          .optional(),
       })
       .parse(input),
   )

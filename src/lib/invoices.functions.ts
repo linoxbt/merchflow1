@@ -10,9 +10,7 @@ const walletSchema = z
 const statusSchema = z.enum(["pending", "paid", "overdue", "cancelled"]);
 
 export const listInvoicesByMerchant = createServerFn({ method: "POST" })
-  .inputValidator((input: { wallet: string }) =>
-    z.object({ wallet: walletSchema }).parse(input),
-  )
+  .inputValidator((input: { wallet: string }) => z.object({ wallet: walletSchema }).parse(input))
   .handler(async ({ data }) => {
     const { data: rows, error } = await supabaseAdmin
       .from("invoices")
@@ -38,24 +36,25 @@ export const getInvoiceByNumber = createServerFn({ method: "POST" })
   });
 
 export const createInvoice = createServerFn({ method: "POST" })
-  .inputValidator((input: {
-    merchantWallet: string;
-    customerWallet: string;
-    description: string;
-    amountUsd: number;
-    amountQie: number;
-    dueDate: string;
-  }) =>
-    z
-      .object({
-        merchantWallet: walletSchema,
-        customerWallet: walletSchema,
-        description: z.string().trim().min(1).max(500),
-        amountUsd: z.number().positive().finite(),
-        amountQie: z.number().positive().finite(),
-        dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      })
-      .parse(input),
+  .inputValidator(
+    (input: {
+      merchantWallet: string;
+      customerWallet: string;
+      description: string;
+      amountUsd: number;
+      amountQie: number;
+      dueDate: string;
+    }) =>
+      z
+        .object({
+          merchantWallet: walletSchema,
+          customerWallet: walletSchema,
+          description: z.string().trim().min(1).max(500),
+          amountUsd: z.number().positive().finite(),
+          amountQie: z.number().positive().finite(),
+          dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        })
+        .parse(input),
   )
   .handler(async ({ data }) => {
     // Next invoice number for this merchant

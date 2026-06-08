@@ -11,10 +11,9 @@ export function BackButton() {
 
   if (pathname === "/") return null;
 
-  const canGoBack =
-    typeof window !== "undefined" && window.history.length > 1;
+  const canGoBack = typeof window !== "undefined" && window.history.length > 1;
 
-  const fallback = pathname.startsWith("/pay/") ? "/" : "/dashboard";
+  const fallback = pathname.startsWith("/pay/") || pathname.startsWith("/p/") ? "/" : "/dashboard";
 
   const cls =
     "inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors";

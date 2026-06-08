@@ -81,17 +81,37 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "MerchFlow — The QIE merchant operating system" },
-      { name: "description", content: "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing." },
+      {
+        name: "description",
+        content:
+          "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing.",
+      },
       { name: "author", content: "MerchFlow" },
       { property: "og:title", content: "MerchFlow — The QIE merchant operating system" },
-      { property: "og:description", content: "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing." },
+      {
+        property: "og:description",
+        content:
+          "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "MerchFlow — The QIE merchant operating system" },
-      { name: "twitter:description", content: "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/e0141ce8-e187-4415-84e4-a70df179d5b3" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/e0141ce8-e187-4415-84e4-a70df179d5b3" },
+      {
+        name: "twitter:description",
+        content:
+          "Accept payments, run payroll, and borrow against on-chain revenue. The merchant bank account QIE businesses have been missing.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/e0141ce8-e187-4415-84e4-a70df179d5b3",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/e0141ce8-e187-4415-84e4-a70df179d5b3",
+      },
     ],
     links: [
       {

@@ -7,11 +7,7 @@ export const getProtocolStats = createServerFn({ method: "GET" }).handler(async 
     supabaseAdmin.from("invoices").select("amount_qie, status"),
     supabaseAdmin.from("payroll_runs").select("total_qie"),
     supabaseAdmin.from("merchants").select("id", { count: "exact", head: true }),
-    supabaseAdmin
-      .from("activity")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(20),
+    supabaseAdmin.from("activity").select("*").order("created_at", { ascending: false }).limit(20),
   ]);
 
   const invoices = invoicesQ.data ?? [];
@@ -40,7 +36,10 @@ export const getTopMerchants = createServerFn({ method: "GET" }).handler(async (
   const byMerchant = new Map<string, number>();
   for (const i of invoices ?? []) {
     if (i.status !== "paid") continue;
-    byMerchant.set(i.merchant_wallet, (byMerchant.get(i.merchant_wallet) ?? 0) + Number(i.amount_qie));
+    byMerchant.set(
+      i.merchant_wallet,
+      (byMerchant.get(i.merchant_wallet) ?? 0) + Number(i.amount_qie),
+    );
   }
   const ranked = [...byMerchant.entries()]
     .map(([wallet, volume]) => ({ wallet, volume }))
@@ -51,16 +50,35 @@ export const getTopMerchants = createServerFn({ method: "GET" }).handler(async (
 });
 
 export const recordActivity = createServerFn({ method: "POST" })
-  .inputValidator((input: { type: string; actorWallet: string; amountQie?: number; refId?: string; txHash?: string }) =>
-    z
-      .object({
-        type: z.enum(["invoice_paid", "payroll_sent", "loan_issued", "loan_repaid", "merchant_registered"]),
-        actorWallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/).transform((v) => v.toLowerCase()),
-        amountQie: z.number().nonnegative().optional(),
-        refId: z.string().max(60).optional(),
-        txHash: z.string().regex(/^0x[a-fA-F0-9]{2,}$/).optional(),
-      })
-      .parse(input),
+  .inputValidator(
+    (input: {
+      type: string;
+      actorWallet: string;
+      amountQie?: number;
+      refId?: string;
+      txHash?: string;
+    }) =>
+      z
+        .object({
+          type: z.enum([
+            "invoice_paid",
+            "payroll_sent",
+            "loan_issued",
+            "loan_repaid",
+            "merchant_registered",
+          ]),
+          actorWallet: z
+            .string()
+            .regex(/^0x[a-fA-F0-9]{40}$/)
+            .transform((v) => v.toLowerCase()),
+          amountQie: z.number().nonnegative().optional(),
+          refId: z.string().max(60).optional(),
+          txHash: z
+            .string()
+            .regex(/^0x[a-fA-F0-9]{2,}$/)
+            .optional(),
+        })
+        .parse(input),
   )
   .handler(async ({ data }) => {
     const { error } = await supabaseAdmin.from("activity").insert({
