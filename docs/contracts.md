@@ -16,7 +16,7 @@ The readable business profile is intentionally not stored directly on-chain. The
 
 ## Invoice Registry
 
-`contracts/InvoiceRegistry.sol` replaces Supabase invoice rows when a registry address is configured.
+`contracts/InvoiceRegistry.sol` replaces the old off-chain invoice rows.
 
 Stored per invoice:
 
@@ -54,18 +54,20 @@ source .env.local
 set +a
 forge create contracts/MerchantRegistry.sol:MerchantRegistry \
   --rpc-url "$QIE_TESTNET_RPC_URL" \
-  --private-key "$QIE_TESTNET_PRIVATE_KEY"
+  --private-key "$QIE_TESTNET_PRIVATE_KEY" \
+  --broadcast
 
 forge create contracts/InvoiceRegistry.sol:InvoiceRegistry \
   --rpc-url "$QIE_TESTNET_RPC_URL" \
-  --private-key "$QIE_TESTNET_PRIVATE_KEY"
+  --private-key "$QIE_TESTNET_PRIVATE_KEY" \
+  --broadcast
 ```
 
-After deployment, add the addresses to `.env.local`:
+Current QIE testnet deployments:
 
 ```env
-VITE_QIE_MERCHANT_REGISTRY_TESTNET=0x...
-VITE_QIE_INVOICE_REGISTRY_TESTNET=0x...
+VITE_QIE_MERCHANT_REGISTRY_TESTNET=0x07E0a4Cd26B006Fa2f6bd5B7B4c321553f65B78f
+VITE_QIE_INVOICE_REGISTRY_TESTNET=0x5D9fc13AeF0aaAABF97734c6aE06151c83FD399A
 ```
 
-Then restart the app so Vite picks up the new public contract address.
+These addresses are also built into `src/lib/qie-contracts.ts` as QIE testnet defaults. Override them with Vite env vars only if you redeploy.

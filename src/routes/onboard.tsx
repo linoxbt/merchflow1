@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Check, Store } from "lucide-react";
-import { useServerFn } from "@tanstack/react-start";
 import { useChainId, useConfig, useWriteContract } from "wagmi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { registerMerchant } from "@/lib/merchants.functions";
-import { getQieContracts, hasQieMerchantRegistry } from "@/lib/qie-contracts";
+import { getQieContracts } from "@/lib/qie-contracts";
 import { qieMainnet, qieTestnet } from "@/lib/chains";
 import { MERCHANT_REGISTRY_ABI, getMerchantProfileHashes } from "@/lib/merchant-registry";
 import { trackTx } from "@/lib/tx-toast";
@@ -41,12 +39,10 @@ const CATEGORIES = [
 function Onboard() {
   const { address, connected, merchant, merchantLoading, setMerchant } = useWallet();
   const navigate = useNavigate();
-  const registerFn = useServerFn(registerMerchant);
   const chainId = useChainId();
   const config = useConfig();
   const { writeContractAsync } = useWriteContract();
   const { merchantRegistry } = getQieContracts(chainId);
-  const onchainRegistryConfigured = hasQieMerchantRegistry();
   const [step, setStep] = useState<1 | 2>(1);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
@@ -81,53 +77,32 @@ function Onboard() {
         website: form.website.trim(),
       };
 
-      if (onchainRegistryConfigured) {
-        if (!merchantRegistry) {
-          toast.error("Merchant registry not configured on this network", {
-            description: `Switch to ${qieTestnet.name}${getQieContracts(qieMainnet.id).merchantRegistry ? ` or ${qieMainnet.name}` : ""}.`,
-          });
-          return;
-        }
-
-        const { metadataHash, categoryHash } = getMerchantProfileHashes(profile);
-        const hash = await writeContractAsync({
-          address: merchantRegistry,
-          abi: MERCHANT_REGISTRY_ABI,
-          functionName: "register",
-          args: [metadataHash, categoryHash],
+      if (!merchantRegistry) {
+        toast.error("Merchant registry not configured on this network", {
+          description: `Switch to ${qieTestnet.name}${getQieContracts(qieMainnet.id).merchantRegistry ? ` or ${qieMainnet.name}` : ""}.`,
         });
-        const receipt = await trackTx(config, hash, { chainId, label: "Merchant registration" });
-        if (receipt?.status !== "success") return;
-
-        setMerchant({
-          address,
-          ...profile,
-          registeredAt: Date.now(),
-          metadataHash,
-          categoryHash,
-          source: "onchain",
-        });
-        toast.success("Business registered on-chain", { description: "Welcome to MerchFlow." });
-        navigate({ to: "/dashboard" });
         return;
       }
 
-      const { merchant: row } = await registerFn({
-        data: {
-          wallet: address,
-          ...profile,
-        },
+      const { metadataHash, categoryHash } = getMerchantProfileHashes(profile);
+      const hash = await writeContractAsync({
+        address: merchantRegistry,
+        abi: MERCHANT_REGISTRY_ABI,
+        functionName: "register",
+        args: [metadataHash, categoryHash],
       });
+      const receipt = await trackTx(config, hash, { chainId, label: "Merchant registration" });
+      if (receipt?.status !== "success") return;
+
       setMerchant({
         address,
-        businessName: row.business_name,
-        category: row.category ?? form.category,
-        description: row.description ?? "",
-        website: row.website ?? "",
-        registeredAt: row.onboarded_at ? new Date(row.onboarded_at).getTime() : Date.now(),
-        source: "supabase",
+        ...profile,
+        registeredAt: Date.now(),
+        metadataHash,
+        categoryHash,
+        source: "onchain",
       });
-      toast.success("Business registered", { description: "Welcome to MerchFlow." });
+      toast.success("Business registered on-chain", { description: "Welcome to MerchFlow." });
       navigate({ to: "/dashboard" });
     } catch (err) {
       console.error(err);
@@ -228,9 +203,8 @@ function Onboard() {
             <div className="font-mono text-sm">{truncateAddress(address, 8, 6)}</div>
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            {onchainRegistryConfigured
-              ? "This action registers your merchant profile hash on-chain. MerchFlow keeps the readable profile locally until decentralized metadata storage is added."
-              : "This action stores your merchant profile in MerchFlow. Deploy and configure the merchant registry to register profiles on-chain."}
+            This action registers your merchant profile hash on-chain. MerchFlow keeps the readable
+            profile locally until decentralized metadata storage is added.
           </p>
           <div className="mt-6 flex justify-between">
             <Button variant="ghost" onClick={() => setStep(1)} className="border border-border">

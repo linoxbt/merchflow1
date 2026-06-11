@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { useChainId, useConfig, useWriteContract } from "wagmi";
 import { RequireWallet } from "@/components/guards";
 import { Button } from "@/components/ui/button";
@@ -32,7 +31,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { formatQie, num, type InvoiceRow, type InvoiceStatus } from "@/lib/types";
 import { useWallet, truncateAddress } from "@/lib/wallet";
 import { getQieContracts, hasQieInvoiceRegistry, QIE_ACCOUNTING_RATE } from "@/lib/qie-contracts";
-import { createInvoice } from "@/lib/invoices.functions";
 import { getPaymentUrl, parsePaymentTarget } from "@/lib/payment-links";
 import { useMerchantInvoices } from "@/lib/use-invoices";
 import {
@@ -106,7 +104,7 @@ function Invoices() {
           </h1>
           <div className="mt-2 text-[11px] font-mono text-muted-foreground">
             Demo accounting: 1 USD = {QIE_ACCOUNTING_RATE.toFixed(0)} QIE
-            {usingOnchain ? " · stored on-chain" : " · Supabase fallback"}
+            {usingOnchain ? " · stored on-chain" : " · switch to QIE network"}
           </div>
         </div>
         <div className="flex gap-2">
@@ -287,12 +285,10 @@ function CreateInvoiceDialog({
   onShowQr: (inv: InvoiceRow) => void;
 }) {
   const { address } = useWallet();
-  const create = useServerFn(createInvoice);
   const chainId = useChainId();
   const config = useConfig();
   const { writeContractAsync } = useWriteContract();
   const { invoiceRegistry } = getQieContracts(chainId);
-  const onchainRegistryConfigured = hasQieInvoiceRegistry();
 
   const [customer, setCustomer] = useState("");
   const [description, setDescription] = useState("");
@@ -341,64 +337,46 @@ function CreateInvoiceDialog({
     try {
       const descriptionText = label ? `${label} - ${description}` : description;
 
-      if (onchainRegistryConfigured) {
-        if (!invoiceRegistry) {
-          toast.error("Invoice registry not configured on this network", {
-            description: `Switch to ${qieTestnet.name}${getQieContracts(qieMainnet.id).invoiceRegistry ? ` or ${qieMainnet.name}` : ""}.`,
-          });
-          return;
-        }
-
-        const number = createOnchainInvoiceNumber();
-        const payload = {
-          number,
-          merchantWallet: address,
-          customerWallet: customer,
-          description: descriptionText,
-          amountUsd: parseFloat(amountUsd),
-          amountQie,
-          dueDate,
-        };
-        const { metadataHash } = getInvoiceMetadataHash(payload);
-        const hash = await writeContractAsync({
-          address: invoiceRegistry,
-          abi: INVOICE_REGISTRY_ABI,
-          functionName: "createInvoice",
-          args: [
-            invoiceIdFromNumber(number),
-            number,
-            customer as `0x${string}`,
-            amountQieToWei(amountQie),
-            amountUsdToCents(parseFloat(amountUsd)),
-            dueDateToUnix(dueDate),
-            metadataHash,
-            descriptionText,
-          ],
+      if (!invoiceRegistry) {
+        toast.error("Invoice registry not configured on this network", {
+          description: `Switch to ${qieTestnet.name}${getQieContracts(qieMainnet.id).invoiceRegistry ? ` or ${qieMainnet.name}` : ""}.`,
         });
-        const receipt = await trackTx(config, hash, { chainId, label: "Invoice creation" });
-        if (receipt?.status !== "success") return;
-
-        const row = buildPendingInvoiceRow(payload);
-        onCreated(row);
-        setCreated(row);
-        toast.success("Invoice created on-chain");
         return;
       }
 
-      const { invoice } = await create({
-        data: {
-          merchantWallet: address,
-          customerWallet: customer,
-          description: descriptionText,
-          amountUsd: parseFloat(amountUsd),
-          amountQie,
-          dueDate,
-        },
+      const number = createOnchainInvoiceNumber();
+      const payload = {
+        number,
+        merchantWallet: address,
+        customerWallet: customer,
+        description: descriptionText,
+        amountUsd: parseFloat(amountUsd),
+        amountQie,
+        dueDate,
+      };
+      const { metadataHash } = getInvoiceMetadataHash(payload);
+      const hash = await writeContractAsync({
+        address: invoiceRegistry,
+        abi: INVOICE_REGISTRY_ABI,
+        functionName: "createInvoice",
+        args: [
+          invoiceIdFromNumber(number),
+          number,
+          customer as `0x${string}`,
+          amountQieToWei(amountQie),
+          amountUsdToCents(parseFloat(amountUsd)),
+          dueDateToUnix(dueDate),
+          metadataHash,
+          descriptionText,
+        ],
       });
-      const row = invoice as InvoiceRow;
+      const receipt = await trackTx(config, hash, { chainId, label: "Invoice creation" });
+      if (receipt?.status !== "success") return;
+
+      const row = buildPendingInvoiceRow(payload);
       onCreated(row);
       setCreated(row);
-      toast.success("Invoice created");
+      toast.success("Invoice created on-chain");
     } catch (err) {
       toast.error("Could not create invoice", {
         description: err instanceof Error ? err.message : "Try again",

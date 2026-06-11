@@ -1,6 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { PayrollRecipientRow, PayrollRunRow } from "@/lib/types";
+import {
+  attachRecipients,
+  createDemoId,
+  currentIso,
+  getDemoStore,
+  recordDemoActivity,
+} from "@/lib/demo-store";
 
 const walletSchema = z
   .string()
@@ -21,13 +28,10 @@ function randomClaimCode() {
 export const listPayrollByMerchant = createServerFn({ method: "POST" })
   .inputValidator((input: { wallet: string }) => z.object({ wallet: walletSchema }).parse(input))
   .handler(async ({ data }) => {
-    const { data: runs, error } = await supabaseAdmin
-      .from("payroll_runs")
-      .select("*, payroll_recipients(*)")
-      .eq("merchant_wallet", data.wallet)
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return { runs: runs ?? [] };
+    const runs = getDemoStore()
+      .payrollRuns.filter((run) => run.merchant_wallet === data.wallet)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return { runs };
   });
 
 export const createPayrollRun = createServerFn({ method: "POST" })
@@ -50,38 +54,29 @@ export const createPayrollRun = createServerFn({ method: "POST" })
         .parse(input),
   )
   .handler(async ({ data }) => {
+    const demo = getDemoStore();
     const totalUsd = data.recipients.reduce((s, r) => s + r.amountUsd, 0);
     const totalQie = data.recipients.reduce((s, r) => s + r.amountQie, 0);
 
-    const { data: latest } = await supabaseAdmin
-      .from("payroll_runs")
-      .select("number")
-      .eq("merchant_wallet", data.merchantWallet)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    let next = 1;
-    if (latest && latest[0]?.number) {
-      const n = parseInt(String(latest[0].number).replace(/\D/g, ""), 10);
-      if (Number.isFinite(n)) next = n + 1;
-    }
+    const ownRuns = demo.payrollRuns.filter((run) => run.merchant_wallet === data.merchantWallet);
+    const next = ownRuns.length + 1;
     const number = `PAY-${String(next).padStart(4, "0")}`;
 
-    const { data: run, error } = await supabaseAdmin
-      .from("payroll_runs")
-      .insert({
-        number,
-        merchant_wallet: data.merchantWallet,
-        total_usd: totalUsd,
-        total_qie: totalQie,
-        recipient_count: data.recipients.length,
-        status: "completed",
-        tx_hash: data.txHash ?? null,
-      })
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
+    const run: PayrollRunRow = {
+      id: createDemoId("pay"),
+      number,
+      merchant_wallet: data.merchantWallet,
+      total_usd: totalUsd,
+      total_qie: totalQie,
+      recipient_count: data.recipients.length,
+      status: "completed",
+      tx_hash: data.txHash ?? null,
+      created_at: currentIso(),
+      payroll_recipients: [],
+    };
 
-    const recipientRows = data.recipients.map((r) => ({
+    const recipients: PayrollRecipientRow[] = data.recipients.map((r) => ({
+      id: createDemoId("rec"),
       run_id: run.id,
       label: r.label,
       wallet: r.wallet ?? null,
@@ -89,22 +84,20 @@ export const createPayrollRun = createServerFn({ method: "POST" })
       amount_qie: r.amountQie,
       claim_code: r.wallet ? null : randomClaimCode(),
       status: r.wallet ? "received" : "pending_claim",
+      created_at: run.created_at,
     }));
-    const { data: recipients, error: rErr } = await supabaseAdmin
-      .from("payroll_recipients")
-      .insert(recipientRows)
-      .select("*");
-    if (rErr) throw new Error(rErr.message);
 
-    await supabaseAdmin.from("activity").insert({
+    const hydrated = attachRecipients(run, recipients);
+    demo.payrollRuns.unshift(hydrated);
+    recordDemoActivity({
       type: "payroll_sent",
-      actor_wallet: data.merchantWallet,
-      amount_qie: totalQie,
-      ref_id: run.number,
-      tx_hash: data.txHash ?? null,
+      actorWallet: data.merchantWallet,
+      amountQie: totalQie,
+      refId: run.number,
+      txHash: data.txHash ?? null,
     });
 
-    return { run, recipients: recipients ?? [] };
+    return { run: hydrated, recipients };
   });
 
 export const redeemClaimCode = createServerFn({ method: "POST" })
@@ -122,26 +115,19 @@ export const redeemClaimCode = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const { data: row, error } = await supabaseAdmin
-      .from("payroll_recipients")
-      .select("*")
-      .eq("claim_code", data.code)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!row) throw new Error("Invalid claim code");
-    if (row.status === "claimed") throw new Error("This claim code has already been redeemed");
-
-    const { data: updated, error: uErr } = await supabaseAdmin
-      .from("payroll_recipients")
-      .update({
+    for (const run of getDemoStore().payrollRuns) {
+      const row = run.payroll_recipients?.find((recipient) => recipient.claim_code === data.code);
+      if (!row) continue;
+      if (row.status === "claimed") throw new Error("This claim code has already been redeemed");
+      const updated: PayrollRecipientRow = {
+        ...row,
         status: "claimed",
-        claim_code_redeemed_at: new Date().toISOString(),
-        claim_code_redeemed_by: data.wallet,
         wallet: data.wallet,
-      })
-      .eq("id", row.id)
-      .select("*")
-      .single();
-    if (uErr) throw new Error(uErr.message);
-    return { recipient: updated };
+      };
+      run.payroll_recipients = (run.payroll_recipients ?? []).map((recipient) =>
+        recipient.id === updated.id ? updated : recipient,
+      );
+      return { recipient: updated };
+    }
+    throw new Error("Invalid claim code");
   });

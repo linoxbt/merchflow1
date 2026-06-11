@@ -8,9 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { useAccount, useChainId, useConnect, useDisconnect, useReadContract } from "wagmi";
-import { getMerchantByWallet } from "@/lib/merchants.functions";
 import { qieTestnet } from "@/lib/chains";
-import { getQieContracts, hasQieMerchantRegistry } from "@/lib/qie-contracts";
+import { getQieContracts } from "@/lib/qie-contracts";
 import {
   MERCHANT_REGISTRY_ABI,
   isRegisteredMerchantRow,
@@ -30,7 +29,7 @@ export type MerchantProfile = {
   registeredAt: number;
   metadataHash?: `0x${string}`;
   categoryHash?: `0x${string}`;
-  source?: "local" | "supabase" | "onchain";
+  source?: "local" | "onchain";
 };
 
 type WalletState = {
@@ -71,7 +70,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const address = wagmiAddress ?? null;
   const { merchantRegistry } = getQieContracts(chainId);
-  const anyRegistryConfigured = hasQieMerchantRegistry();
   const [merchant, setMerchantState] = useState<MerchantProfile | null>(null);
   const [merchantLoading, setMerchantLoading] = useState(false);
 
@@ -97,46 +95,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const entry = store[address.toLowerCase()];
     setMerchantState(entry?.merchant ?? null);
 
-    if (anyRegistryConfigured) {
-      if (!merchantRegistry) {
-        setMerchantState(null);
-        setMerchantLoading(false);
-        return;
-      }
-      setMerchantLoading(true);
+    if (!merchantRegistry) {
+      setMerchantState(null);
+      setMerchantLoading(false);
       return;
     }
 
-    // Supabase remains a fallback only until a merchant registry is deployed/configured.
-    let cancelled = false;
-    setMerchantLoading(!entry?.merchant);
-    getMerchantByWallet({ data: { wallet: address } })
-      .then(({ merchant: row }) => {
-        if (cancelled || !row) return;
-        const hydrated: MerchantProfile = {
-          address,
-          businessName: row.business_name,
-          category: row.category ?? "",
-          description: row.description ?? "",
-          website: row.website ?? "",
-          registeredAt: row.onboarded_at ? new Date(row.onboarded_at).getTime() : Date.now(),
-          source: "supabase",
-        };
-        setMerchantState(hydrated);
-        const store2 = readStore();
-        store2[address.toLowerCase()] = {
-          merchant: hydrated,
-        };
-        writeStore(store2);
-      })
-      .catch((err) => console.error("Failed to load merchant", err))
-      .finally(() => {
-        if (!cancelled) setMerchantLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [address, anyRegistryConfigured, merchantRegistry]);
+    setMerchantLoading(true);
+  }, [address, merchantRegistry]);
 
   useEffect(() => {
     if (!address || !merchantRegistry) return;

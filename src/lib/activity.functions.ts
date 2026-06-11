@@ -1,44 +1,37 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getDemoStore, recordDemoActivity } from "@/lib/demo-store";
 
 export const getProtocolStats = createServerFn({ method: "GET" }).handler(async () => {
-  const [invoicesQ, payrollQ, merchantsQ, activityQ] = await Promise.all([
-    supabaseAdmin.from("invoices").select("amount_qie, status"),
-    supabaseAdmin.from("payroll_runs").select("total_qie"),
-    supabaseAdmin.from("merchants").select("id", { count: "exact", head: true }),
-    supabaseAdmin.from("activity").select("*").order("created_at", { ascending: false }).limit(20),
-  ]);
-
-  const invoices = invoicesQ.data ?? [];
-  const payroll = payrollQ.data ?? [];
-  const paid = invoices.filter((i) => i.status === "paid");
-  const totalVolumeQie = paid.reduce((s, i) => s + Number(i.amount_qie), 0);
+  const demo = getDemoStore();
+  const payroll = demo.payrollRuns;
+  const paidInvoiceEvents = demo.activity.filter((item) => item.type === "invoice_paid");
+  const totalVolumeQie = paidInvoiceEvents.reduce((s, item) => s + Number(item.amount_qie ?? 0), 0);
   const payrollProcessedQie = payroll.reduce((s, p) => s + Number(p.total_qie), 0);
+  const activeMerchants = new Set([
+    ...payroll.map((run) => run.merchant_wallet),
+    ...demo.loans.map((loan) => loan.merchant_wallet),
+    ...demo.activity.map((item) => item.actor_wallet),
+  ]).size;
 
   return {
     stats: {
-      invoicesPaid: paid.length,
+      invoicesPaid: paidInvoiceEvents.length,
       totalVolumeQie,
-      activeMerchants: merchantsQ.count ?? 0,
+      activeMerchants,
       payrollProcessedQie,
     },
-    activity: activityQ.data ?? [],
+    activity: demo.activity.slice(0, 20),
   };
 });
 
 export const getTopMerchants = createServerFn({ method: "GET" }).handler(async () => {
-  const { data: invoices, error } = await supabaseAdmin
-    .from("invoices")
-    .select("merchant_wallet, amount_qie, status");
-  if (error) throw new Error(error.message);
-
   const byMerchant = new Map<string, number>();
-  for (const i of invoices ?? []) {
-    if (i.status !== "paid") continue;
+  for (const item of getDemoStore().activity) {
+    if (item.type !== "invoice_paid") continue;
     byMerchant.set(
-      i.merchant_wallet,
-      (byMerchant.get(i.merchant_wallet) ?? 0) + Number(i.amount_qie),
+      item.actor_wallet,
+      (byMerchant.get(item.actor_wallet) ?? 0) + Number(item.amount_qie ?? 0),
     );
   }
   const ranked = [...byMerchant.entries()]
@@ -81,13 +74,12 @@ export const recordActivity = createServerFn({ method: "POST" })
         .parse(input),
   )
   .handler(async ({ data }) => {
-    const { error } = await supabaseAdmin.from("activity").insert({
+    recordDemoActivity({
       type: data.type,
-      actor_wallet: data.actorWallet,
-      amount_qie: data.amountQie ?? null,
-      ref_id: data.refId ?? null,
-      tx_hash: data.txHash ?? null,
+      actorWallet: data.actorWallet,
+      amountQie: data.amountQie ?? null,
+      refId: data.refId ?? null,
+      txHash: data.txHash ?? null,
     });
-    if (error) throw new Error(error.message);
     return { ok: true };
   });

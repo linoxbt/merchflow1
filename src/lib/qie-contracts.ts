@@ -20,6 +20,11 @@ const MAINNET_DEFAULTS = {
   stable: "0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5" as `0x${string}`, // QUSDC
 };
 
+const TESTNET_DEFAULTS = {
+  merchantRegistry: "0x07E0a4Cd26B006Fa2f6bd5B7B4c321553f65B78f" as `0x${string}`,
+  invoiceRegistry: "0x5D9fc13AeF0aaAABF97734c6aE06151c83FD399A" as `0x${string}`,
+};
+
 export const QIE_ACCOUNTING_RATE = 1.0;
 
 export type QieContracts = {
@@ -31,8 +36,9 @@ export type QieContracts = {
 export const QIE_CONTRACTS: Record<number, QieContracts> = {
   [qieTestnet.id]: {
     stable: env("VITE_QIE_STABLE_TESTNET"),
-    merchantRegistry: env("VITE_QIE_MERCHANT_REGISTRY_TESTNET"),
-    invoiceRegistry: env("VITE_QIE_INVOICE_REGISTRY_TESTNET"),
+    merchantRegistry:
+      env("VITE_QIE_MERCHANT_REGISTRY_TESTNET") ?? TESTNET_DEFAULTS.merchantRegistry,
+    invoiceRegistry: env("VITE_QIE_INVOICE_REGISTRY_TESTNET") ?? TESTNET_DEFAULTS.invoiceRegistry,
   },
   [qieMainnet.id]: {
     stable: env("VITE_QIE_STABLE_MAINNET") ?? MAINNET_DEFAULTS.stable,

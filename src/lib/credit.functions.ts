@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { MONTHLY_RATE, type LoanRow } from "@/lib/types";
+import { createDemoId, currentIso, getDemoStore, recordDemoActivity } from "@/lib/demo-store";
 
 const walletSchema = z
   .string()
@@ -14,50 +15,42 @@ const walletSchema = z
 export const getCreditProfile = createServerFn({ method: "POST" })
   .inputValidator((input: { wallet: string }) => z.object({ wallet: walletSchema }).parse(input))
   .handler(async ({ data }) => {
-    const [invoicesQ, payrollQ, merchantQ, loansQ] = await Promise.all([
-      supabaseAdmin.from("invoices").select("*").eq("merchant_wallet", data.wallet),
-      supabaseAdmin.from("payroll_runs").select("*").eq("merchant_wallet", data.wallet),
-      supabaseAdmin.from("merchants").select("*").eq("wallet_address", data.wallet).maybeSingle(),
-      supabaseAdmin.from("loans").select("*").eq("merchant_wallet", data.wallet),
-    ]);
-
-    const invoices = invoicesQ.data ?? [];
-    const payroll = payrollQ.data ?? [];
-    const merchant = merchantQ.data;
-    const loans = loansQ.data ?? [];
-
-    const paidInvoices = invoices.filter((i) => i.status === "paid");
-    const totalRevenueQie = paidInvoices.reduce((s, i) => s + Number(i.amount_qie), 0);
-    const uniqueCustomers = new Set(invoices.map((i) => i.customer_wallet)).size;
-    const accountAgeDays = merchant?.onboarded_at
-      ? Math.max(0, (Date.now() - new Date(merchant.onboarded_at).getTime()) / 86_400_000)
+    const demo = getDemoStore();
+    const payroll = demo.payrollRuns.filter((run) => run.merchant_wallet === data.wallet);
+    const loans = demo.loans.filter((loan) => loan.merchant_wallet === data.wallet);
+    const recipients = payroll.flatMap((run) => run.payroll_recipients ?? []);
+    const uniqueRecipients = new Set(
+      recipients.map((recipient) => recipient.wallet ?? recipient.label),
+    ).size;
+    const firstRun = payroll.at(-1);
+    const accountAgeDays = firstRun
+      ? Math.max(0, (Date.now() - new Date(firstRun.created_at).getTime()) / 86_400_000)
       : 0;
-    const onTimeRate = invoices.length ? paidInvoices.length / invoices.length : 0;
+    const totalPayrollQie = payroll.reduce((sum, run) => sum + Number(run.total_qie), 0);
 
     const signals = [
       {
         name: "Invoice Volume",
-        score: Math.min(300, Math.round(paidInvoices.length * 20)),
+        score: 0,
         max: 300,
       },
-      { name: "Payment Regularity", score: Math.round(onTimeRate * 200), max: 200 },
+      { name: "Payment Regularity", score: 0, max: 200 },
       {
         name: "Payroll Consistency",
         score: Math.min(200, Math.round(payroll.length * 25)),
         max: 200,
       },
       {
-        name: "Unique Customers",
-        score: Math.min(200, Math.round(uniqueCustomers * 25)),
+        name: "Unique Recipients",
+        score: Math.min(200, Math.round(uniqueRecipients * 25)),
         max: 200,
       },
       { name: "Account Age", score: Math.min(100, Math.round(accountAgeDays / 3)), max: 100 },
     ];
     const score = signals.reduce((s, x) => s + x.score, 0);
 
-    // Max loan = 3× 30-day average revenue, capped at 1000 QIE for safety.
-    const avg30dRevenue = totalRevenueQie / 30 || 0;
-    const maxLoanQie = Math.min(1000, Math.max(0, Math.round(avg30dRevenue * 3 * 100) / 100));
+    const avg30dPayroll = totalPayrollQie / 30 || 0;
+    const maxLoanQie = Math.min(1000, Math.max(0, Math.round(avg30dPayroll * 3 * 100) / 100));
 
     const activeLoan = loans.find((l) => l.status === "active") ?? null;
 
@@ -65,7 +58,7 @@ export const getCreditProfile = createServerFn({ method: "POST" })
       signals,
       score,
       maxLoanQie,
-      totalRevenueQie,
+      totalRevenueQie: 0,
       activeLoan,
       loanHistory: loans,
     };
@@ -86,32 +79,30 @@ export const requestLoan = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const monthlyRate = 0.024;
-    const interestQie = +(data.principalQie * monthlyRate).toFixed(6);
+    const interestQie = +(data.principalQie * MONTHLY_RATE).toFixed(6);
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 30);
 
-    const { data: loan, error } = await supabaseAdmin
-      .from("loans")
-      .insert({
-        merchant_wallet: data.wallet,
-        principal_qie: data.principalQie,
-        monthly_rate: monthlyRate,
-        interest_qie: interestQie,
-        paid_qie: 0,
-        due_date: dueDate.toISOString().slice(0, 10),
-        status: "active",
-        tx_hash: data.txHash ?? null,
-      })
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
-
-    await supabaseAdmin.from("activity").insert({
-      type: "loan_issued",
-      actor_wallet: data.wallet,
-      amount_qie: data.principalQie,
+    const loan: LoanRow = {
+      id: createDemoId("loan"),
+      merchant_wallet: data.wallet,
+      principal_qie: data.principalQie,
+      monthly_rate: MONTHLY_RATE,
+      interest_qie: interestQie,
+      paid_qie: 0,
+      due_date: dueDate.toISOString().slice(0, 10),
+      status: "active",
       tx_hash: data.txHash ?? null,
+      created_at: currentIso(),
+      closed_at: null,
+    };
+
+    getDemoStore().loans.unshift(loan);
+    recordDemoActivity({
+      type: "loan_issued",
+      actorWallet: data.wallet,
+      amountQie: data.principalQie,
+      txHash: data.txHash ?? null,
     });
 
     return { loan };
@@ -128,34 +119,26 @@ export const repayLoan = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const { data: loan, error } = await supabaseAdmin
-      .from("loans")
-      .select("*")
-      .eq("id", data.loanId)
-      .single();
-    if (error) throw new Error(error.message);
+    const demo = getDemoStore();
+    const loan = demo.loans.find((item) => item.id === data.loanId);
+    if (!loan) throw new Error("Loan not found");
 
     const newPaid = Number(loan.paid_qie) + data.amountQie;
     const totalDue = Number(loan.principal_qie) + Number(loan.interest_qie);
     const status = newPaid >= totalDue ? "repaid" : "active";
+    const updated: LoanRow = {
+      ...loan,
+      paid_qie: newPaid,
+      status,
+      closed_at: status === "repaid" ? currentIso() : null,
+    };
+    demo.loans = demo.loans.map((item) => (item.id === updated.id ? updated : item));
 
-    const { data: updated, error: uErr } = await supabaseAdmin
-      .from("loans")
-      .update({
-        paid_qie: newPaid,
-        status,
-        closed_at: status === "repaid" ? new Date().toISOString() : null,
-      })
-      .eq("id", data.loanId)
-      .select("*")
-      .single();
-    if (uErr) throw new Error(uErr.message);
-
-    await supabaseAdmin.from("activity").insert({
+    recordDemoActivity({
       type: "loan_repaid",
-      actor_wallet: loan.merchant_wallet,
-      amount_qie: data.amountQie,
-      tx_hash: data.txHash,
+      actorWallet: loan.merchant_wallet,
+      amountQie: data.amountQie,
+      txHash: data.txHash,
     });
 
     return { loan: updated };
@@ -172,22 +155,19 @@ export const depositToPool = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const { data: row, error } = await supabaseAdmin
-      .from("pool_deposits")
-      .insert({ depositor_wallet: data.wallet, amount_qie: data.amountQie, tx_hash: data.txHash })
-      .select("*")
-      .single();
-    if (error) throw new Error(error.message);
+    const row = {
+      id: createDemoId("dep"),
+      depositor_wallet: data.wallet,
+      amount_qie: data.amountQie,
+      tx_hash: data.txHash,
+      created_at: currentIso(),
+    };
+    getDemoStore().deposits.unshift(row);
     return { deposit: row };
   });
 
 export const getPoolStats = createServerFn({ method: "GET" }).handler(async () => {
-  const [depositsQ, loansQ] = await Promise.all([
-    supabaseAdmin.from("pool_deposits").select("amount_qie, depositor_wallet"),
-    supabaseAdmin.from("loans").select("principal_qie, paid_qie, status"),
-  ]);
-  const deposits = depositsQ.data ?? [];
-  const loans = loansQ.data ?? [];
+  const { deposits, loans } = getDemoStore();
 
   const size = deposits.reduce((s, d) => s + Number(d.amount_qie), 0);
   const outstanding = loans

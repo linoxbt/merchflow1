@@ -1,4 +1,4 @@
-// Shared types and formatters. Data can come from QIE contracts or Supabase fallbacks.
+// Shared types and formatters. Core merchant and invoice data come from QIE contracts.
 
 export type InvoiceStatus = "pending" | "paid" | "overdue" | "cancelled";
 
@@ -16,7 +16,7 @@ export type InvoiceRow = {
   paid_at: string | null;
   created_at: string;
   metadata_hash?: `0x${string}`;
-  source?: "supabase" | "onchain";
+  source?: "onchain";
 };
 
 export type PayrollRecipientRow = {
